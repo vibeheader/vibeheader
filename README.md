@@ -8,9 +8,20 @@ VibeHeader lets you add custom HTTP **request headers** to your browser traffic 
 
 - 🎯 **Focused** — add, edit, toggle, and remove request headers. Nothing else to get in the way.
 - 🔗 **One-click sharing** — turn your headers into a link and send it to a teammate; they import it in one click.
-- 🔒 **Privacy-first** — all data is stored locally in `chrome.storage.local`. No backend, no account, no telemetry.
+- 🔒 **Privacy-first** — all data is stored locally in `chrome.storage.local`. No backend, no account, nothing uploaded.
 - ⚡ **Fast toggle** — pause or resume all headers instantly.
 - 🪶 **Local-only data** — needs all-sites host access (granted at install) to apply your headers, but nothing ever leaves your machine.
+
+## Why VibeHeader over ModHeader?
+
+ModHeader was the default header editor for years — then it added ads, went closed-source, and was caught shipping malware. VibeHeader is the clean-slate alternative:
+
+- **Open source (MIT)** — every line is auditable, so a bad update can't hide.
+- **No ads. Ever.**
+- **Local by design** — your config lives in `chrome.storage.local`; the extension uploads nothing.
+- **Minimal permissions** — host access only to apply the headers you set.
+
+[Why we built it after the ModHeader incident →](https://vibeheader.com/blog/modheader-malware-why-i-built-vibeheader/)
 
 ## 📦 Install
 
@@ -32,7 +43,7 @@ VibeHeader lets you add custom HTTP **request headers** to your browser traffic 
 VibeHeader is built to not touch your data:
 
 - **Local only** — header names, values, and settings live in `chrome.storage.local` and are never uploaded.
-- **No backend, no account, no telemetry** — the extension sends nothing to us or any third party.
+- **No backend, no account** — the extension itself sends nothing to us or any third party.
 - **Share links never hit a server** — a config is encoded in the URL fragment (`#c=`), which the browser does not transmit. Sharing is entirely client-side.
 - **Host access** — VibeHeader requests all-sites host access at install time so it can apply your configured headers to the requests you make. It's used only to modify the request headers you set up — never to read or transmit page content.
 
