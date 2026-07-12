@@ -1,5 +1,7 @@
 # VibeHeader
 
+[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/imjffcblfdblnjcekpamheljmolejoll?label=Chrome%20Web%20Store)](https://chromewebstore.google.com/detail/vibeheader/imjffcblfdblnjcekpamheljmolejoll) [![License: MIT](https://img.shields.io/github/license/vibeheader/vibeheader)](LICENSE)
+
 > A lightweight, ad-free HTTP header editor for Chrome — with one-click shareable configs. A clean ModHeader alternative.
 
 **[Install from the Chrome Web Store →](https://chromewebstore.google.com/detail/vibeheader/imjffcblfdblnjcekpamheljmolejoll)**
