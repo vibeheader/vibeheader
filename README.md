@@ -14,14 +14,14 @@ VibeHeader lets you add custom HTTP **request headers** to your browser traffic 
 
 ## Why VibeHeader over ModHeader?
 
-ModHeader was the default header editor for years — then it added ads, went closed-source, and was caught shipping malware. VibeHeader is the clean-slate alternative:
+ModHeader was the default header editor for years, but it added ads and went closed-source — so we built VibeHeader as an open, ad-free alternative. ModHeader was later caught shipping malware, which only confirmed why an auditable tool matters.
 
 - **Open source (MIT)** — every line is auditable, so a bad update can't hide.
 - **No ads. Ever.**
 - **Local by design** — your config lives in `chrome.storage.local`; the extension uploads nothing.
 - **Minimal permissions** — host access only to apply the headers you set.
 
-[Why we built it after the ModHeader incident →](https://vibeheader.com/blog/modheader-malware-why-i-built-vibeheader/)
+[Why we built VibeHeader →](https://vibeheader.com/blog/modheader-malware-why-i-built-vibeheader/)
 
 ## 📦 Install
 
