@@ -4,6 +4,8 @@
 
 VibeHeader lets you add custom HTTP **request headers** to your browser traffic and share that setup with a single link. No account, no ads, no tracking — everything stays on your machine.
 
+![VibeHeader Chrome extension popup editing HTTP request headers](docs/screenshot.png)
+
 ## ✨ Features
 
 - 🎯 **Focused** — add, edit, toggle, and remove request headers. Nothing else to get in the way.
