@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "VibeHeader",
+  "version": "1.0.0",
+  "description": "Lightweight, ad-free HTTP header editor with one-click share links. A clean ModHeader alternative.",
+  "permissions": [
+    "storage",
+    "declarativeNetRequest",
+    "declarativeNetRequestWithHostAccess",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "*://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "VibeHeader",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "content_scripts": [
+    { "matches": [
+        "https://vibeheader.com/s*",
+        "https://www.vibeheader.com/s*"
+      ], "js": ["content-script.js"], "run_at": "document_start" }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [],
+  "declarative_net_request": { "rule_resources": [] }
+}

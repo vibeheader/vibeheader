@@ -1,0 +1,66 @@
+{
+  "name": "vibeheader",
+  "version": "1.0.0",
+  "description": "Lightweight, ad-free HTTP header editor for Chrome with one-click shareable configs. A clean ModHeader alternative.",
+  "scripts": {
+    "dev": "BUILD_ENV=dev rollup -c --watch",
+    "build": "BUILD_ENV=dev rollup -c",
+    "build:prod": "BUILD_ENV=prod NODE_ENV=production rollup -c",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "clean": "rimraf dist",
+    "icons:gen": "node scripts/generate-icons.js",
+    "zip:prod": "BUILD_ENV=prod NODE_ENV=production rollup -c && node -e 'const {execSync}=require(\"child_process\"); const v=(require(\"./dist/manifest.json\").version)||\"\"; const cmd=\"rm -f vibeheader-\"+v+\".zip && zip -r vibeheader-\"+v+\".zip dist -x \\\"*.DS_Store\\\"\"; execSync(cmd,{stdio:\"inherit\"});'",
+    "zip": "npm run zip:prod",
+    "zip:only": "node -e 'const {execSync}=require(\"child_process\"); const v=(require(\"./dist/manifest.json\").version)||\"\"; const cmd=\"rm -f vibeheader-\"+v+\".zip && zip -r vibeheader-\"+v+\".zip dist -x \\\"*.DS_Store\\\"\"; execSync(cmd,{stdio:\"inherit\"});'"
+  },
+  "keywords": [
+    "browser-extension",
+    "http-headers",
+    "modheader",
+    "debugging",
+    "chrome-extension"
+  ],
+  "author": "VibeHeader",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@babel/preset-env": "^7.24.0",
+    "@rollup/plugin-commonjs": "^25.0.7",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-replace": "^5.0.5",
+    "@rollup/plugin-terser": "^1.0.0",
+    "autoprefixer": "^10.4.21",
+    "babel-jest": "^29.7.0",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "rimraf": "^5.0.5",
+    "rollup": "^4.9.6",
+    "rollup-plugin-copy": "^3.5.0",
+    "rollup-plugin-postcss": "^4.0.2",
+    "sharp": "^0.34.3"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "collectCoverageFrom": [
+      "src/**/*.js",
+      "!src/**/*.test.js"
+    ],
+    "coverageDirectory": "coverage",
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "html"
+    ]
+  },
+  "browserslist": [
+    "Chrome >= 88",
+    "Edge >= 88"
+  ]
+}

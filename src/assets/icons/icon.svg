@@ -1,0 +1,23 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="vh-grad" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#7C3AED"/>
+      <stop offset="100%" stop-color="#06B6D4"/>
+    </linearGradient>
+    <filter id="vh-shadow" x="0" y="0" width="200%" height="200%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect x="4" y="4" width="120" height="120" rx="24" fill="url(#vh-grad)"/>
+
+  <!-- Minimal header bars -->
+  <rect x="28" y="30" width="72" height="12" rx="6" fill="#FFFFFF" fill-opacity="0.92"/>
+  <rect x="28" y="50" width="56" height="10" rx="5" fill="#FFFFFF" fill-opacity="0.65"/>
+  <rect x="28" y="68" width="44" height="10" rx="5" fill="#FFFFFF" fill-opacity="0.40"/>
+
+  <!-- Stylized V mark -->
+  <path d="M38 86 L58 108 L90 60" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" filter="url(#vh-shadow)"/>
+</svg>
+
