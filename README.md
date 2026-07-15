@@ -4,7 +4,7 @@
 
 > A lightweight, ad-free HTTP header editor for Chrome — with one-click shareable configs. A clean ModHeader alternative.
 
-**[Install from the Chrome Web Store →](https://chromewebstore.google.com/detail/vibeheader/imjffcblfdblnjcekpamheljmolejoll)**
+**[Install for Chrome →](https://chromewebstore.google.com/detail/vibeheader/imjffcblfdblnjcekpamheljmolejoll)** · **[Install for Edge →](https://microsoftedge.microsoft.com/addons/detail/vibeheader/eajhmeknjclcllddogondingcdjpdbag)**
 
 VibeHeader lets you add custom HTTP **request headers** to your browser traffic and share that setup with a single link. No account, no ads, no tracking — everything stays on your machine.
 
@@ -32,6 +32,7 @@ ModHeader was the default header editor for years, but it added ads and went clo
 ## 📦 Install
 
 - **Chrome Web Store:** [VibeHeader](https://chromewebstore.google.com/detail/vibeheader/imjffcblfdblnjcekpamheljmolejoll)
+- **Edge Add-ons:** [VibeHeader](https://microsoftedge.microsoft.com/addons/detail/vibeheader/eajhmeknjclcllddogondingcdjpdbag)
 - **From source:** see [Development](#-development) below, then load the `dist/` folder as an unpacked extension.
 
 ## 🚀 Usage
