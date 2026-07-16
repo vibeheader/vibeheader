@@ -1,8 +1,22 @@
 import { Config } from '../models/Config.js';
 import { StorageService } from '../utils/storage.js';
 
+/** Resource types that commonly need injected request headers. */
+const RESOURCE_TYPES = [
+  'main_frame',
+  'sub_frame',
+  'xmlhttprequest',
+  'websocket',
+  'other',
+  'ping'
+];
+
 /**
- * Manages configs and syncs them to declarativeNetRequest dynamic rules.
+ * Manages configs and syncs them to declarativeNetRequest rules.
+ *
+ * URL patterns match the browser tab address (including hash routes).
+ * When a tab matches, that tab's headers are applied to requests from that tab
+ * via session rules + tabIds (not by filtering the API request URL).
  */
 export class ConfigService {
   constructor() {
@@ -68,10 +82,34 @@ export class ConfigService {
       throw new Error('Config not found');
     }
 
-    config.setEnabled(enabled);
+    // Global pause/resume: every URL-pattern tab shares one enabled flag
+    await this.setGlobalEnabled(enabled);
+    return this.getConfigById(id);
+  }
+
+  /**
+   * Enable or disable all URL-pattern tabs together (single Pause/Resume control).
+   */
+  async setGlobalEnabled(enabled) {
+    for (const config of this.configs) {
+      config.setEnabled(enabled);
+    }
     await this.saveConfigs();
     await this.updateNetworkRules();
-    return config;
+  }
+
+  async deleteConfig(id) {
+    const before = this.configs.length;
+    this.configs = this.configs.filter(config => config.id !== id);
+    if (this.configs.length === before) {
+      throw new Error('Config not found');
+    }
+    if (this.configs.length === 0) {
+      throw new Error('Cannot delete the last config');
+    }
+    await this.saveConfigs();
+    await this.updateNetworkRules();
+    return true;
   }
 
   getEnabledConfigs() {
@@ -79,26 +117,167 @@ export class ConfigService {
   }
 
   /**
-   * Rebuild the dynamic DNR rules from the currently enabled configs.
+   * True when the scope matches every browser tab ("*" / empty / type "all").
+   */
+  isMatchAllScope(scope) {
+    if (!scope || scope.type === 'all') return true;
+    if (scope.type === 'regex') {
+      const pattern = (scope.value || '').trim();
+      return !pattern || pattern === '*';
+    }
+    return false;
+  }
+
+  /**
+   * Normalize a tab URL for matching: drop hash (SPA routes) and trailing slash noise.
+   */
+  normalizeTabUrl(url) {
+    if (!url) return '';
+    // Hash is part of the address bar but never sent on HTTP requests; match both forms.
+    const noHash = String(url).split('#')[0];
+    return noHash;
+  }
+
+  /**
+   * Variant patterns so "…/default/" also matches "…/default" and "…/default#/…".
+   */
+  patternVariants(pattern) {
+    const p = (pattern || '').trim();
+    if (!p) return [];
+    const out = new Set([p]);
+    if (p.endsWith('/')) out.add(p.slice(0, -1));
+    else out.add(p + '/');
+    return [...out];
+  }
+
+  /**
+   * Match a browser tab URL against a config scope (supports hash SPA routes).
+   * Users usually paste an address-bar prefix; we treat that as startsWith, and
+   * also try it as a RegExp for advanced patterns.
+   */
+  isUrlMatchingScope(url, scope) {
+    try {
+      if (!url) return false;
+      if (this.isMatchAllScope(scope)) return true;
+
+      if (scope.type === 'regex') {
+        const pattern = (scope.value || '').trim();
+        const full = String(url);
+        const noHash = this.normalizeTabUrl(full);
+        const candidates = [full, noHash];
+
+        for (const p of this.patternVariants(pattern)) {
+          // Prefix match (typical when pasting http://host/path/)
+          if (candidates.some(c => c === p || c.startsWith(p))) return true;
+
+          // Regex match against full URL and hash-stripped URL
+          try {
+            const re = new RegExp(p);
+            if (candidates.some(c => re.test(c))) return true;
+          } catch (_) {
+            // invalid regex variant — ignore and keep trying others
+          }
+        }
+        return false;
+      }
+
+      const urlObj = new URL(url);
+      const noHash = this.normalizeTabUrl(url);
+
+      if (scope.type === 'domain') {
+        return urlObj.hostname === scope.value || urlObj.hostname.endsWith('.' + scope.value);
+      }
+
+      if (scope.type === 'url_prefix' || scope.type === 'prefix') {
+        const prefix = scope.value || '';
+        return this.patternVariants(prefix).some(p => noHash.startsWith(p) || url.startsWith(p));
+      }
+
+      return false;
+    } catch (_) {
+      // Invalid URL or invalid regex → no match
+      return false;
+    }
+  }
+
+  /**
+   * Rebuild DNR rules from enabled configs and currently open tabs.
+   * - Match-all ("*") → persistent dynamic rules (all tabs)
+   * - Patterned tabs → session rules scoped to matching tabIds
    */
   async updateNetworkRules() {
     // Serialize DNR updates to avoid concurrent add/remove races that cause duplicate IDs
     this._ruleUpdatePromise = this._ruleUpdatePromise.then(async () => {
       try {
         const enabledConfigs = this.getEnabledConfigs();
+        const globalConfigs = [];
+        const patternedConfigs = [];
 
-        // Remove existing dynamic rules first
-        const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
-        const ruleIds = existingRules.map(rule => rule.id);
-        if (ruleIds.length > 0) {
-          await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: ruleIds });
+        enabledConfigs.forEach(config => {
+          if (this.isMatchAllScope(config.scope)) globalConfigs.push(config);
+          else patternedConfigs.push(config);
+        });
+
+        // Collect open tabs so patterned rules can target the browser address bar URL
+        let tabs = [];
+        try {
+          tabs = await chrome.tabs.query({});
+        } catch (e) {
+          console.warn('tabs.query failed; patterned rules may be empty:', e?.message || e);
         }
 
-        // Build and add new rules
-        const newRules = this.buildDnrRules(enabledConfigs);
-        if (newRules.length > 0) {
-          await chrome.declarativeNetRequest.updateDynamicRules({ addRules: newRules });
-        }
+        // Sequential IDs avoid rare hash collisions that would reject the whole update
+        let nextId = 1;
+        const assignIds = (rules) => rules.map(rule => ({ ...rule, id: nextId++ }));
+
+        const dynamicRules = assignIds(this.buildDnrRules(globalConfigs));
+
+        const sessionRules = [];
+        patternedConfigs.forEach(config => {
+          const matched = tabs.filter(
+            t => typeof t.id === 'number' && this.isUrlMatchingScope(t.url, config.scope)
+          );
+          const tabIds = matched.map(t => t.id);
+          if (tabIds.length === 0) {
+            console.log(
+              '[VibeHeader] No open tab matches pattern',
+              config.scope?.value || config.name,
+              '| sample tab urls:',
+              tabs.slice(0, 5).map(t => t.url || '(no url)')
+            );
+            return;
+          }
+          console.log(
+            '[VibeHeader] Pattern matched tabs',
+            config.scope?.value,
+            '→',
+            matched.map(t => ({ id: t.id, url: t.url }))
+          );
+          sessionRules.push(...this.buildDnrRules([config], { tabIds }));
+        });
+        const sessionRulesWithIds = assignIds(sessionRules);
+
+        // Replace dynamic rules (match-all)
+        const existingDynamic = await chrome.declarativeNetRequest.getDynamicRules();
+        await chrome.declarativeNetRequest.updateDynamicRules({
+          removeRuleIds: existingDynamic.map(rule => rule.id),
+          addRules: dynamicRules
+        });
+
+        // Replace session rules (tab-address patterns); tabIds are only valid here
+        const existingSession = await chrome.declarativeNetRequest.getSessionRules();
+        await chrome.declarativeNetRequest.updateSessionRules({
+          removeRuleIds: existingSession.map(rule => rule.id),
+          addRules: sessionRulesWithIds
+        });
+
+        console.log(
+          '[VibeHeader] Rules updated:',
+          dynamicRules.length,
+          'dynamic,',
+          sessionRulesWithIds.length,
+          'session'
+        );
       } catch (error) {
         console.error('Failed to update network rules:', error);
         throw error;
@@ -108,72 +287,53 @@ export class ConfigService {
   }
 
   /**
-   * Build DNR rules from the enabled configs. Pure function, kept easy to unit test.
+   * Build DNR modifyHeaders rules. Pure helper for unit tests.
+   * @param {object[]} enabledConfigs
+   * @param {{ tabIds?: number[] }} [options] - when set, rules only apply to those tabs
    */
-  buildDnrRules(enabledConfigs) {
+  buildDnrRules(enabledConfigs, options = {}) {
+    const tabIds = options.tabIds;
     const rules = [];
+
     enabledConfigs.forEach(config => {
       (config.headers || []).forEach((header, idx) => {
-        if (!header || !header.enabled) return;
+        if (!header || header.enabled === false) return;
         if (!header.name || !header.name.trim()) return; // skip empty names
-        const rule = {
-          id: this.generateRuleId(config.id, idx),
-          priority: 1,
-          action: {
-            type: 'modifyHeaders',
-            requestHeaders: header.type === 'request' ? [
-              { header: header.name, operation: 'set', value: header.value }
-            ] : undefined,
-            responseHeaders: header.type === 'response' ? [
-              { header: header.name, operation: 'set', value: header.value }
-            ] : undefined
-          },
-          condition: this.buildRuleCondition(config.scope)
+
+        // Default to request headers when type is missing (older stored configs)
+        const isResponse = header.type === 'response';
+
+        const condition = {
+          resourceTypes: RESOURCE_TYPES
         };
-        rules.push(rule);
+        // Session rules may restrict by browser tab; request URL is intentionally not filtered
+        // so SPA API calls from a matching page still receive headers.
+        if (Array.isArray(tabIds) && tabIds.length > 0) {
+          condition.tabIds = tabIds;
+        }
+
+        const action = { type: 'modifyHeaders' };
+        if (isResponse) {
+          action.responseHeaders = [
+            { header: header.name, operation: 'set', value: header.value ?? '' }
+          ];
+        } else {
+          action.requestHeaders = [
+            { header: header.name, operation: 'set', value: header.value ?? '' }
+          ];
+        }
+
+        rules.push({
+          // Placeholder id; updateNetworkRules assigns unique sequential ids
+          id: idx + 1,
+          priority: 1,
+          action,
+          condition
+        });
       });
     });
     return rules;
   }
-
-  /**
-   * Generate a stable, unique positive rule ID from configId + header index.
-   */
-  generateRuleId(configId, headerIndex) {
-    const hash = this.hashString(configId);
-    // mix index, ensure positive and non-zero, clamp to 31-bit (Chrome requirement)
-    let id = (hash ^ ((headerIndex + 1) * 2654435761)) & 0x7fffffff;
-    if (id === 0) id = 1;
-    return id;
-  }
-
-  hashString(str) {
-    // simple DJB2 hash
-    let h = 5381;
-    for (let i = 0; i < str.length; i++) {
-      h = ((h << 5) + h) + str.charCodeAt(i);
-      h |= 0; // to 32-bit
-    }
-    return h & 0x7fffffff;
-  }
-
-  buildRuleCondition(scope) {
-    const condition = {};
-
-    if (!scope || scope.type === 'all') {
-      // match all; explicitly include only valid DNR types (subset we care about)
-      condition.resourceTypes = ['main_frame', 'sub_frame', 'xmlhttprequest'];
-      return condition;
-    }
-
-    if (scope.type === 'domain') {
-      condition.requestDomains = [scope.value];
-      condition.resourceTypes = ['main_frame', 'sub_frame', 'xmlhttprequest'];
-    } else if (scope.type === 'url_prefix' || scope.type === 'prefix') {
-      condition.urlFilter = scope.value + '*';
-      condition.resourceTypes = ['main_frame', 'sub_frame', 'xmlhttprequest'];
-    }
-
-    return condition;
-  }
 }
+
+export { RESOURCE_TYPES };

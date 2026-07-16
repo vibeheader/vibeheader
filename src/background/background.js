@@ -7,6 +7,7 @@ class BackgroundService {
     this.configService = new ConfigService();
     this.isInitialized = false;
     this.readyPromise = null;
+    this._ruleRefreshTimer = null;
   }
 
   // Init
@@ -50,12 +51,28 @@ class BackgroundService {
       }
     });
 
-    // tabs updated
-    chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-      if (changeInfo.status === 'complete' && tab.url) {
-        this.handleTabUpdated(tab);
+    // Tab address changes (including SPA hash routes) must rebuild session rules
+    chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
+      if (changeInfo.url || changeInfo.status === 'complete') {
+        this.scheduleRuleRefresh();
+        if (tab?.url) this.updateBadgeForTab(tab);
       }
     });
+    chrome.tabs.onRemoved.addListener(() => {
+      this.scheduleRuleRefresh();
+    });
+  }
+
+  /**
+   * Debounce DNR rebuilds while the user navigates quickly.
+   */
+  scheduleRuleRefresh() {
+    clearTimeout(this._ruleRefreshTimer);
+    this._ruleRefreshTimer = setTimeout(() => {
+      this.configService.updateNetworkRules().catch(e => {
+        console.warn('Rule refresh after tab change failed:', e?.message || e);
+      });
+    }, 120);
   }
 
   // Install/update
@@ -76,8 +93,9 @@ class BackgroundService {
 
   // Default config
   async createDefaultConfig() {
+    // Default tab matches all URLs ("*" in the popup tab bar)
     const defaultConfig = {
-      name: 'Default',
+      name: '*',
       enabled: false,
       headers: [],
       scope: { type: 'all', value: '' }
@@ -128,6 +146,34 @@ class BackgroundService {
           success: true,
           data: toggledConfig
         });
+        break;
+      }
+
+      case 'setGlobalEnabled': {
+        await this.configService.setGlobalEnabled(!!data.enabled);
+        await this.updateActionState();
+        sendResponse({
+          success: true,
+          data: this.configService.getAllConfigs()
+        });
+        break;
+      }
+
+      case 'deleteConfig': {
+        await this.configService.deleteConfig(data.id);
+        await this.updateActionState();
+        sendResponse({
+          success: true,
+          data: this.configService.getAllConfigs()
+        });
+        break;
+      }
+
+      case 'refreshRules': {
+        // Popup asks to rebuild session rules against current tab URLs
+        await this.configService.updateNetworkRules();
+        await this.updateActionState();
+        sendResponse({ success: true });
         break;
       }
 
@@ -208,34 +254,13 @@ class BackgroundService {
     }
   }
 
-  // Tab updated
-  handleTabUpdated(tab) {
-    // Example: check scope match
-    const enabledConfigs = this.configService.getEnabledConfigs();
-    const matchingConfigs = enabledConfigs.filter(config => {
-      return this.isUrlMatchingScope(tab.url, config.scope);
+  // Badge: how many URL-pattern tabs match this browser address
+  updateBadgeForTab(tab) {
+    if (!tab?.id || !tab.url) return;
+    const matchingConfigs = this.configService.getEnabledConfigs().filter(config => {
+      return this.configService.isUrlMatchingScope(tab.url, config.scope);
     });
-
-    if (matchingConfigs.length > 0) {
-      this.updateBadge(tab.id, matchingConfigs.length);
-    }
-  }
-
-  // URL match helper
-  isUrlMatchingScope(url, scope) {
-    try {
-      const urlObj = new URL(url);
-
-      if (scope.type === 'domain') {
-        return urlObj.hostname === scope.value || urlObj.hostname.endsWith('.' + scope.value);
-      } else if (scope.type === 'url_prefix') {
-        return url.startsWith(scope.value);
-      }
-
-      return false;
-    } catch (error) {
-      return false;
-    }
+    this.updateBadge(tab.id, matchingConfigs.length);
   }
 
   // Badge

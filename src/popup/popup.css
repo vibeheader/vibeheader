@@ -13,7 +13,172 @@
 html, body { margin: 0; padding: 0; background: var(--vh-bg); color: var(--vh-fg); font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
 
 .vh-container { width: 480px; box-sizing: border-box; padding: 14px 16px 16px; }
-.vh-headerbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.vh-headerbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+
+/* URL-pattern tabs (regex per tab; "*" = match all URLs) */
+.vh-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.vh-tab-form-host {
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--vh-border);
+}
+.vh-tab-form-host[hidden] {
+  display: none !important;
+}
+/* Keep the bottom rule under tabs when the form is closed */
+.vh-tabs:not(.vh-tabs--editing) {
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--vh-border);
+}
+.vh-tab {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 160px;
+  height: 28px;
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--vh-border);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--vh-muted);
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  cursor: pointer;
+  line-height: 1;
+}
+.vh-tab:hover { background: #f8fafc; color: var(--vh-fg); }
+.vh-tab[aria-selected="true"] {
+  background: #f5f3ff;
+  border-color: var(--vh-brand);
+  color: var(--vh-brand-700);
+}
+.vh-tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vh-tab-close {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.55;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.vh-tab-close:hover { opacity: 1; background: rgba(220, 38, 38, 0.1); color: var(--vh-danger); }
+.vh-tab-close svg { width: 10px; height: 10px; display: block; }
+.vh-tab-add {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px dashed var(--vh-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--vh-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.vh-tab-add:hover {
+  border-color: var(--vh-brand);
+  color: var(--vh-brand);
+  background: #f6f5ff;
+}
+.vh-tab--alias .vh-tab-label {
+  font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  font-weight: 550;
+}
+.vh-tab-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.vh-tab-edit {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--vh-border);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--vh-fg);
+  font-size: 12px;
+  outline: none;
+}
+.vh-tab-edit:focus {
+  border-color: var(--vh-brand);
+  box-shadow: 0 0 0 2px rgba(124,58,237,.25);
+}
+.vh-tab-alias {
+  font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  width: 110px;
+  flex-shrink: 0;
+}
+.vh-tab-pattern {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  flex: 1;
+  min-width: 0;
+}
+.vh-tab-form-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.vh-tab-form-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--vh-border);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--vh-muted);
+  cursor: pointer;
+}
+.vh-tab-form-btn svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+.vh-tab-form-ok {
+  color: #059669;
+  border-color: #a7f3d0;
+}
+.vh-tab-form-ok:hover {
+  background: #ecfdf5;
+  border-color: #059669;
+  color: #047857;
+}
+.vh-tab-form-cancel:hover {
+  background: #fee2e2;
+  border-color: #fecaca;
+  color: var(--vh-danger);
+}
 
 /* Title: logo mark + solid wordmark (no gradient) */
 .vh-title {
