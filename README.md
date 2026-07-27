@@ -2,21 +2,28 @@
 
 [![Chrome Web Store](https://img.shields.io/chrome-web-store/v/imjffcblfdblnjcekpamheljmolejoll?label=Chrome%20Web%20Store)](https://chromewebstore.google.com/detail/vibeheader/imjffcblfdblnjcekpamheljmolejoll) [![License: MIT](https://img.shields.io/github/license/vibeheader/vibeheader)](LICENSE)
 
-> A lightweight, ad-free HTTP header editor for Chrome — with one-click shareable configs. A clean ModHeader alternative.
+> A lightweight, privacy-first HTTP request header editor for Chrome and Edge — with request filters, Profiles, and one-click share links.
 
 **[Install for Chrome →](https://chromewebstore.google.com/detail/vibeheader/imjffcblfdblnjcekpamheljmolejoll)** · **[Install for Edge →](https://microsoftedge.microsoft.com/addons/detail/vibeheader/eajhmeknjclcllddogondingcdjpdbag)**
 
-VibeHeader lets you add custom HTTP **request headers** to your browser traffic and share that setup with a single link. No account, no ads, no tracking — everything stays on your machine.
+VibeHeader lets you add custom HTTP **request headers**, control where they apply, organize them into Profiles, and share complete setups with a single link. No account, no ads, no tracking — everything is stored locally on your device.
 
-![VibeHeader Chrome extension popup editing HTTP request headers](docs/screenshot.png)
+<p align="center">
+  <img src="docs/simple-by-default.png" alt="Simple by default: edit three request headers, share them with a link, and apply them locally">
+</p>
+
+<p align="center">
+  <img src="docs/powerful-when-needed.png" alt="Powerful when needed: scope request headers with tested URL filters and switch between multiple Profiles">
+</p>
+
 
 ## ✨ Features
 
-- 🎯 **Focused** — add, edit, toggle, and remove request headers. Nothing else to get in the way.
-- 🔗 **One-click sharing** — turn your headers into a link and send it to a teammate; they import it in one click.
-- 🔒 **Privacy-first** — all data is stored locally in `chrome.storage.local`. No backend, no account, nothing uploaded.
-- ⚡ **Fast toggle** — pause or resume all headers instantly.
-- 🪶 **Local-only data** — needs all-sites host access (granted at install) to apply your headers, but nothing ever leaves your machine.
+- ⚡ **Fast header editing** — add, edit, toggle, and remove request headers with a minimal UI built for daily debugging.
+- 🎯 **Request filters** — apply headers only to matching domains, URLs, wildcard patterns, or regular expressions, with a built-in URL tester.
+- 🗂️ **Multiple Profiles** — keep projects and environments separate, switch between them quickly, or run several at the same time.
+- 🔗 **One-click Profile sharing** — share a Profile, including its enabled headers and valid request filters, without exporting JSON. Recipients can preview it before importing.
+- 🔒 **Privacy-first** — no backend, no account, no ads, and no tracking. Profiles and settings stay in `chrome.storage.local`.
 
 ## Why VibeHeader over ModHeader?
 
@@ -29,6 +36,14 @@ ModHeader was the default header editor for years, but it added ads and went clo
 
 [Why we built VibeHeader →](https://vibeheader.com/blog/modheader-malware-why-i-built-vibeheader/)
 
+## Design principles
+
+**Simple by default, powerful when needed.**
+
+- **Essentials first** — add, remove, enable, or disable headers and pause a Profile without configuring anything else.
+- **Progressive disclosure** — request filters, URL testing, and Profile management stay out of the way until you choose to use them.
+- **Focused, not bloated** — new features should make header editing safer or faster without turning the popup into a dashboard.
+
 ## 📦 Install
 
 - **Chrome Web Store:** [VibeHeader](https://chromewebstore.google.com/detail/vibeheader/imjffcblfdblnjcekpamheljmolejoll)
@@ -37,11 +52,13 @@ ModHeader was the default header editor for years, but it added ads and went clo
 
 ## 🚀 Usage
 
-1. Click the VibeHeader toolbar icon.
-2. Add a header — a name (e.g. `Authorization`) and a value (e.g. `Bearer token123`).
-3. The header is applied to your requests. Use **Pause / Resume** to toggle all headers at once.
-4. Click **Copy Link** to generate a share link containing your enabled headers.
-5. Whoever opens that link (with VibeHeader installed) can import the headers in one click.
+1. Click the VibeHeader toolbar icon and add the headers you need.
+2. Optionally add request filters to control where they apply — by domain, URL, wildcard pattern, or regular expression.
+3. Create Profiles to keep different projects or environments separate. Multiple Profiles can remain active at the same time.
+4. Use **Pause / Resume** to toggle the current Profile without losing its setup.
+5. Click **Copy Link** to share the current Profile. Recipients can preview its headers and filters before importing it in one click.
+
+> A Profile with no active request filters applies to all requests. When active Profiles set the same header on matching requests, the later Profile takes priority and VibeHeader shows an override warning.
 
 > Header modification is powered by Chrome's Manifest V3 `declarativeNetRequest` API, which governs exactly which headers can be changed.
 
@@ -49,9 +66,9 @@ ModHeader was the default header editor for years, but it added ads and went clo
 
 VibeHeader is built to not touch your data:
 
-- **Local only** — header names, values, and settings live in `chrome.storage.local` and are never uploaded.
+- **Local only** — header names, values, and settings live in `chrome.storage.local`; VibeHeader does not sync them to a backend.
 - **No backend, no account** — the extension itself sends nothing to us or any third party.
-- **Share links never hit a server** — a config is encoded in the URL fragment (`#c=`), which the browser does not transmit. Sharing is entirely client-side.
+- **No VibeHeader upload** — shared Profiles are encoded locally in the URL fragment (`#c=`), which the browser does not send to vibeheader.com.
 - **Host access** — VibeHeader requests all-sites host access at install time so it can apply your configured headers to the requests you make. It's used only to modify the request headers you set up — never to read or transmit page content.
 
 The code is fully open — audit it yourself. Report security issues via [SECURITY.md](SECURITY.md).
@@ -72,13 +89,36 @@ npm run build
 # Production build (for store submission), uses manifest.prod.json
 npm run build:prod
 
-# Lint & test
+# Lint
 npm run lint
+
+# Unit tests
 npm run test
+npm run test:watch
+npm run test:coverage
+
+# End-to-end tests
+npm run test:e2e
+npm run test:e2e:headed
 
 # Produce a store-ready zip of dist/
 npm run zip
 ```
+
+### Testing
+
+- **Unit tests (Jest)** cover the Profile model, request-rule generation, validation, sharing and import messages, background task ordering, and popup behavior.
+- **End-to-end tests (Playwright)** load the production extension in Chromium and exercise real popup persistence, header modification, request filters, Profiles, and URL testing.
+- `npm run test:e2e` automatically cleans and rebuilds the production extension before running. Use `npm run test:e2e:headed` to watch the browser.
+
+Run a single test file:
+
+```bash
+npx jest tests/configService.rules.test.js
+npx playwright test e2e/profiles-filters.spec.js
+```
+
+If Playwright cannot find Chromium, install it once with `npx playwright install chromium`.
 
 Load the unpacked extension:
 
