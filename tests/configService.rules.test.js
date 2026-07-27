@@ -53,3 +53,58 @@ describe('ConfigService buildDnrRules', () => {
     expect(rules[0].action.requestHeaders[0]).toEqual({ header: 'B', operation: 'set', value: 'b' });
   });
 });
+
+describe('ConfigService updateNetworkRules', () => {
+  afterEach(() => {
+    delete global.chrome;
+    jest.restoreAllMocks();
+  });
+
+  test('replaces old and new dynamic rules in one atomic call', async () => {
+    const updateDynamicRules = jest.fn(async () => {});
+    global.chrome = {
+      declarativeNetRequest: {
+        getDynamicRules: jest.fn(async () => [{ id: 99 }]),
+        updateDynamicRules
+      }
+    };
+    const svc = new ConfigService();
+    const cfg = new Config({
+      id: 'config_atomic',
+      enabled: true,
+      scope: { type: 'all', value: '' },
+      headers: [{ name: 'X-Test', value: 'new', type: 'request', enabled: true }]
+    });
+    svc.configs = [cfg];
+
+    await svc.updateNetworkRules();
+
+    expect(updateDynamicRules).toHaveBeenCalledTimes(1);
+    expect(updateDynamicRules).toHaveBeenCalledWith({
+      removeRuleIds: [99],
+      addRules: svc.buildDnrRules([cfg])
+    });
+  });
+
+  test('allows a later rule update to recover after one update fails', async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    const updateDynamicRules = jest.fn()
+      .mockRejectedValueOnce(new Error('invalid runtime rule'))
+      .mockResolvedValue(undefined);
+    global.chrome = {
+      declarativeNetRequest: {
+        getDynamicRules: jest.fn(async () => []),
+        updateDynamicRules
+      }
+    };
+    const svc = new ConfigService();
+    svc.configs = [new Config({
+      enabled: true,
+      headers: [{ name: 'X-Test', value: '1', type: 'request', enabled: true }]
+    })];
+
+    await expect(svc.updateNetworkRules()).rejects.toThrow('invalid runtime rule');
+    await expect(svc.updateNetworkRules()).resolves.toBeUndefined();
+    expect(updateDynamicRules).toHaveBeenCalledTimes(2);
+  });
+});

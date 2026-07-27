@@ -1,0 +1,80 @@
+name: Quality
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "e2e/**"
+      - "package.json"
+      - "package-lock.json"
+      - "babel.config.cjs"
+      - ".eslintrc.js"
+      - "playwright.config.cjs"
+      - "postcss.config.cjs"
+      - "rollup.config.js"
+      - "manifest.*.json"
+      - ".github/workflows/quality.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "e2e/**"
+      - "package.json"
+      - "package-lock.json"
+      - "babel.config.cjs"
+      - ".eslintrc.js"
+      - "playwright.config.cjs"
+      - "postcss.config.cjs"
+      - "rollup.config.js"
+      - "manifest.*.json"
+      - ".github/workflows/quality.yml"
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Lint, unit, Chromium E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests with coverage
+        run: npm run test:coverage -- --runInBand
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Chromium E2E
+        run: npm run test:e2e
+
+      - name: Upload E2E failure details
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7

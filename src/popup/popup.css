@@ -11,6 +11,7 @@
 }
 
 html, body { margin: 0; padding: 0; background: var(--vh-bg); color: var(--vh-fg); font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+[hidden] { display: none !important; }
 
 .vh-container { width: 480px; box-sizing: border-box; padding: 14px 16px 16px; }
 .vh-headerbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
@@ -27,7 +28,7 @@ html, body { margin: 0; padding: 0; background: var(--vh-bg); color: var(--vh-fg
 }
 .vh-title img { display: block; width: 18px; height: 18px; border-radius: 5px; }
 
-.vh-hb-actions { display: flex; align-items: center; gap: 8px; }
+.vh-hb-actions { display: flex; align-items: center; gap: 8px; min-height: 32px; }
 
 /* unified icon size */
 .vh-icon { width: 14px; height: 14px; display: block; }
