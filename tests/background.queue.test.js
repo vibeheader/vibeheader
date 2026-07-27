@@ -193,7 +193,7 @@ describe('BackgroundService config task queue', () => {
       ],
       f: [
         ['www.google.com.hk', true],
-        ['*.vibeheader.com', true]
+        ['*.vibeheader.com', false]
       ]
     });
 
@@ -211,7 +211,7 @@ describe('BackgroundService config task queue', () => {
         }),
         expect.objectContaining({
           expression: '*.vibeheader.com',
-          enabled: true
+          enabled: false
         })
       ]
     });

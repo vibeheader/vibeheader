@@ -242,6 +242,14 @@ describe('popup state', () => {
     later.filters = [{ expression: '^https://.*\\.example\\.com/', enabled: true }];
     expect(findOverridingProfile([first, later], first.id, header))
       .toBe(later);
+
+    later.filters = [{ expression: 'api.other.com', enabled: false }];
+    expect(findOverridingProfile([first, later], first.id, header))
+      .toBe(later);
+
+    later.filters = [{ expression: 'https://', enabled: true }];
+    expect(findOverridingProfile([first, later], first.id, header))
+      .toBe(later);
   });
 
   test('keeps controls gated until initialization completes', async () => {
@@ -371,7 +379,7 @@ describe('popup persistence', () => {
       ],
       filters: [
         { expression: 'www.google.com.hk', enabled: true },
-        { expression: '*.vibeheader.com', enabled: true }
+        { expression: '*.vibeheader.com', enabled: false }
       ]
     }));
 
@@ -384,7 +392,7 @@ describe('popup persistence', () => {
       ],
       f: [
         ['www.google.com.hk', true],
-        ['*.vibeheader.com', true]
+        ['*.vibeheader.com', false]
       ]
     });
   });
@@ -540,6 +548,30 @@ describe('popup persistence', () => {
     expect(summary).not.toContain('+1');
     expect(app.profileSharePayload(app.config).f)
       .toEqual([['api.example.com', true]]);
+  });
+
+  test('shows and tests All requests when every valid Filter is disabled', async () => {
+    const { app } = await createApp(makeConfig({
+      enabled: true,
+      headers: [{ name: 'X-Test', value: 'value', enabled: true, type: 'request' }],
+      filters: [{ expression: '*.vibeheader.com', enabled: false }]
+    }));
+    app.currentTabUrl = 'https://vibeheader.com/';
+    app.renderFilters();
+
+    const summary = document.getElementById('filtersSummary').textContent;
+    expect(summary).toContain('All requests');
+    expect(summary).toContain('Active on this tab');
+
+    document.getElementById('filtersSummary').click();
+    document.getElementById('testUrlBtn').click();
+    const testerInput = document.getElementById('urlTesterInput');
+    testerInput.value = 'https://unrelated.example.com/';
+    testerInput.dispatchEvent(new Event('input', { bubbles: true }));
+    document.getElementById('urlTesterRun').click();
+
+    expect(document.getElementById('urlTesterResult').textContent)
+      .toBe('Matches all requests — no active filters');
   });
 
   test('disables Add filter at the per-Profile limit', async () => {

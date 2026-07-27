@@ -44,7 +44,7 @@ describe('Profile model migration', () => {
     ]);
   });
 
-  test('uses allRequests until a valid Filter has entered content', () => {
+  test('uses allRequests until an enabled valid Filter has entered content', () => {
     const profile = new Config({ headers: [] });
     expect(isAllRequestsMatch(profile.primaryRule.requestMatches[0])).toBe(true);
 
@@ -59,6 +59,13 @@ describe('Profile model migration', () => {
     profile.filters = [
       { expression: '', enabled: true },
       { expression: 'api.example.com', enabled: false }
+    ];
+    expect(profile.primaryRule.requestMatches).toHaveLength(3);
+    expect(profile.primaryRule.requestMatches.some(isAllRequestsMatch)).toBe(true);
+
+    profile.filters = [
+      { expression: 'api.example.com', enabled: false },
+      { expression: 'staging.example.com', enabled: true }
     ];
     expect(profile.primaryRule.requestMatches).toHaveLength(2);
     expect(profile.primaryRule.requestMatches.some(isAllRequestsMatch)).toBe(false);
@@ -224,6 +231,22 @@ describe('Request Filter matching and compilation', () => {
     expect(rules).toHaveLength(2);
     expect(rules.every(rule => rule.action.requestHeaders[0].header === 'X-Test'))
       .toBe(true);
+  });
+
+  test('applies to all requests when every Filter is disabled', () => {
+    const service = new ConfigService();
+    const profile = new Config({
+      active: true,
+      headers: [{ name: 'X-Test', value: '1', enabled: true }],
+      filters: [
+        { expression: 'api.example.com', enabled: false },
+        { expression: '*.internal.example.com', enabled: false }
+      ]
+    });
+
+    const rules = service.buildDnrRules([profile]);
+    expect(rules).toHaveLength(1);
+    expect(rules[0].condition).not.toHaveProperty('regexFilter');
   });
 
   test('keeps applying to all requests while the only Filter is blank', () => {
