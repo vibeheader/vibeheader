@@ -49,6 +49,25 @@ export default [
       isProduction && terser()
     ].filter(Boolean)
   },
+
+  // Popup URL tester worker. User-provided regex runs off the UI thread and
+  // the popup terminates this worker when one Filter exceeds the time budget.
+  {
+    input: 'src/popup/filter-match-worker.js',
+    output: {
+      file: 'dist/filter-match-worker.js',
+      format: 'iife'
+    },
+    plugins: [
+      nodeResolve(),
+      commonjs(),
+      replace({
+        'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
+        preventAssignment: true
+      }),
+      isProduction && terser()
+    ].filter(Boolean)
+  },
   
   // (Options removed for MVP)
   

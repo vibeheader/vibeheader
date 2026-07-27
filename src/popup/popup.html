@@ -7,31 +7,120 @@
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <div id="app" class="vh-container">
-    <div class="vh-headerbar">
-      <div class="vh-title"><img src="icons/icon32.png" alt="" width="18" height="18" />VibeHeader</div>
-      <div class="vh-hb-actions">
+  <section id="app" class="vh-container">
+    <header class="vh-headerbar">
+      <div class="vh-identity">
+        <img src="icons/icon32.png" alt="" width="18" height="18">
+        <div id="profileContext">
+          <button id="profileTrigger" class="vh-profile-trigger" type="button"
+            aria-haspopup="menu" aria-controls="profileMenu" aria-expanded="false">
+            <span id="profileName" class="vh-profile-name">VibeHeader</span>
+            <svg class="vh-chevron" width="12" height="12" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" stroke-width="2.4"
+              stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+        </div>
+        <div id="profileRename" class="vh-profile-rename-box" hidden>
+          <input id="profileRenameInput" class="vh-rename-input vh-header-rename-input"
+            aria-label="Profile name">
+          <button id="profileRenameSave" class="vh-save-name" type="button">Save</button>
+        </div>
+      </div>
+
+      <div class="vh-header-actions">
         <button id="toggleBtn" class="vh-toggle" aria-pressed="false" hidden disabled>
           <svg viewBox="0 0 24 24" class="vh-icon" fill="currentColor"></svg>
           <span>Resume</span>
         </button>
         <button id="shareBtn" class="vh-share" title="Copy link" hidden disabled>
-          <svg viewBox="0 0 24 24" class="vh-icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg viewBox="0 0 24 24" class="vh-icon" aria-hidden="true"
+            fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
             <path d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 11-5.656-5.656l1.172-1.172"/>
             <path d="M10.172 13.828a4 4 0 010-5.656l3-3a4 4 0 115.656 5.656l-1.172 1.172"/>
           </svg>
           <span>Copy Link</span>
         </button>
       </div>
+    </header>
+
+    <div id="pauseBanner" class="vh-pause-banner" hidden>
+      <svg class="vh-pause-banner-icon" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linejoin="round"
+        aria-hidden="true">
+        <rect x="6" y="5" width="4" height="14" rx="1"/>
+        <rect x="14" y="5" width="4" height="14" rx="1"/>
+      </svg>
+      <span id="pauseBannerText"><strong>Paused.</strong> Headers aren’t being applied.</span>
     </div>
 
-    <div id="headers" class="vh-rows"><!-- rows --></div>
+    <div class="vh-content">
+      <div id="headers" class="vh-rows"></div>
 
-    <div class="vh-actions">
-      <button id="addHeaderBtn" class="vh-link" disabled>+ Add header</button>
-      <a id="feedbackLink" class="vh-feedback" target="_blank" rel="noopener" hidden>Feedback</a>
+      <section id="filtersSection" class="vh-filters-section"
+        aria-label="Request filters" hidden>
+        <button id="filtersSummary" class="vh-filters-summary" type="button"
+          aria-controls="filtersPanel" aria-expanded="false"></button>
+        <div id="filtersPanel" class="vh-filters-panel" hidden>
+          <div id="filters" class="vh-filter-list"></div>
+          <div class="vh-filter-panel-footer">
+            <button id="testUrlBtn" class="vh-test-link" type="button"
+              aria-controls="urlTester" aria-expanded="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                aria-hidden="true">
+                <path d="M9 3h6M10 3v6.5L5.5 18A2 2 0 007.3 21h9.4a2 2 0 001.8-3L14 9.5V3"/>
+              </svg>
+              Test a URL
+            </button>
+          </div>
+          <div id="urlTester" class="vh-url-tester" hidden>
+            <div class="vh-tester-heading">
+              <span>URL test</span>
+              <button id="urlTesterDone" class="vh-tester-close" type="button"
+                aria-label="Close URL test" title="Close">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6L6 18"/>
+                </svg>
+              </button>
+            </div>
+            <div class="vh-tester-controls">
+              <input id="urlTesterInput" class="vh-input"
+                placeholder="https://api.example.com/path" aria-label="URL to test"
+                aria-describedby="urlTesterResult" aria-invalid="false">
+              <button id="urlTesterRun" class="vh-tester-run" type="button" disabled>Test</button>
+            </div>
+            <div id="urlTesterResult" class="vh-tester-result"
+              aria-live="polite" hidden></div>
+          </div>
+        </div>
+      </section>
+
+      <footer class="vh-footer">
+        <div class="vh-footer-actions">
+          <button id="addHeaderBtn" class="vh-link" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2.3" stroke-linecap="round" aria-hidden="true">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+            Add header
+          </button>
+          <button id="addFilterBtn" class="vh-link" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2.3" stroke-linecap="round" aria-hidden="true">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+            Add filter
+          </button>
+        </div>
+        <a id="feedbackLink" class="vh-feedback" target="_blank"
+          rel="noopener" hidden>Feedback</a>
+      </footer>
     </div>
-  </div>
+
+    <div id="profileMenu" class="vh-profile-menu" role="menu" hidden></div>
+  </section>
 
   <script src="popup.js"></script>
 </body>

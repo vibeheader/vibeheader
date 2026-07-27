@@ -19,19 +19,71 @@
 
     if (msg.type === 'VIBE_PING') {
       // the share page is probing whether the extension is installed
-      window.postMessage({ type: 'VIBE_ACK' }, '*');
+      window.postMessage({
+        type: 'VIBE_ACK',
+        requestId: msg.requestId,
+        protocols: [1, 2],
+        features: ['profiles', 'requestFilters', 'importAsNewProfile']
+      }, '*');
       return;
     }
 
     if (msg.type === 'VIBE_IMPORT' && Array.isArray(msg.h)) {
       try {
         const res = await chrome.runtime.sendMessage({
-          action: 'importSharedKV',
-          data: { h: msg.h }
+          action: msg.v === 2 ? 'importSharedProfile' : 'importSharedKV',
+          data: msg.v === 2
+            ? { v: 2, n: msg.n, h: msg.h, f: msg.f }
+            : { h: msg.h, name: msg.name }
         });
-        window.postMessage({ type: 'VIBE_RESULT', success: !!res?.success }, '*');
+        window.postMessage({
+          type: 'VIBE_RESULT',
+          requestId: msg.requestId,
+          success: !!res?.success,
+          data: res?.success
+            ? {
+              profileName: res.data?.name,
+              active: res.data?.active
+            }
+            : undefined,
+          error: res?.success ? undefined : res?.error
+        }, '*');
       } catch (e) {
-        window.postMessage({ type: 'VIBE_RESULT', success: false, error: e?.message }, '*');
+        window.postMessage({
+          type: 'VIBE_RESULT',
+          requestId: msg.requestId,
+          success: false,
+          error: e?.message
+        }, '*');
+      }
+      return;
+    }
+
+    if (msg.type === 'VIBE_IMPORT_V2') {
+      try {
+        const res = await chrome.runtime.sendMessage({
+          action: 'importSharedProfile',
+          data: msg.payload
+        });
+        window.postMessage({
+          type: 'VIBE_RESULT',
+          requestId: msg.requestId,
+          success: !!res?.success,
+          data: res?.success
+            ? {
+              profileName: res.data?.name,
+              active: res.data?.active
+            }
+            : undefined,
+          error: res?.success ? undefined : res?.error
+        }, '*');
+      } catch (e) {
+        window.postMessage({
+          type: 'VIBE_RESULT',
+          requestId: msg.requestId,
+          success: false,
+          error: e?.message
+        }, '*');
       }
     }
   }, false);

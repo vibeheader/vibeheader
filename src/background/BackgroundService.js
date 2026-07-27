@@ -1,5 +1,10 @@
 import { ConfigService } from '../shared/services/ConfigService.js';
 import { ValidationUtils } from '../shared/utils/validation.js';
+import {
+  normalizeRequestMatch,
+  RequestFilterLimits,
+  serializedUtf8Size
+} from '../shared/utils/requestFilters.js';
 
 // Background Service Worker
 export class BackgroundService {
@@ -14,6 +19,35 @@ export class BackgroundService {
     const result = this._configTaskTail.then(task);
     this._configTaskTail = result.catch(() => {});
     return result;
+  }
+
+  serializeProfile(profile) {
+    const canonical = typeof profile?.toJSON === 'function'
+      ? profile.toJSON()
+      : { ...(profile || {}) };
+    return {
+      ...canonical,
+      // Keep the popup message boundary compatible during the schema
+      // migration. Storage remains canonical and never writes these aliases.
+      enabled: typeof profile?.enabled === 'boolean'
+        ? profile.enabled
+        : !!canonical.active,
+      headers: Array.isArray(profile?.headers)
+        ? profile.headers.map(header => ({ ...header }))
+        : [],
+      filters: Array.isArray(profile?.filters)
+        ? profile.filters.map(filter => ({ ...filter }))
+        : []
+    };
+  }
+
+  serializeProfileState(state) {
+    return {
+      ...state,
+      profiles: (state?.profiles || []).map(profile =>
+        this.serializeProfile(profile)
+      )
+    };
   }
 
   // Init
@@ -60,12 +94,6 @@ export class BackgroundService {
       }
     });
 
-    // tabs updated
-    chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-      if (changeInfo.status === 'complete' && tab.url) {
-        this.handleTabUpdated(tab);
-      }
-    });
   }
 
   // Install/update
@@ -91,7 +119,7 @@ export class BackgroundService {
   async createDefaultConfig() {
     const defaultConfig = {
       name: 'Default',
-      enabled: false,
+      active: false,
       headers: [],
       scope: { type: 'all', value: '' }
     };
@@ -113,16 +141,30 @@ export class BackgroundService {
         const configs = await this.enqueueConfigTask(() => this.configService.getAllConfigs());
         sendResponse({
           success: true,
-          data: configs
+          data: configs.map(config => this.serializeProfile(config))
+        });
+        break;
+      }
+
+      case 'getProfileState': {
+        const state = await this.enqueueConfigTask(() => this.configService.getProfileState());
+        sendResponse({
+          success: true,
+          data: this.serializeProfileState(state)
         });
         break;
       }
 
       case 'addConfig': {
-        const newConfig = await this.enqueueConfigTask(() => this.configService.addConfig(data));
+        const newConfig = await this.enqueueConfigTask(async () => {
+          const added = await this.configService.addConfig(data);
+          await this.configService.updateNetworkRules();
+          await this.updateActionState();
+          return added;
+        });
         sendResponse({
           success: true,
-          data: newConfig
+          data: this.serializeProfile(newConfig)
         });
         break;
       }
@@ -136,7 +178,7 @@ export class BackgroundService {
         });
         sendResponse({
           success: true,
-          data: updatedConfig
+          data: this.serializeProfile(updatedConfig)
         });
         break;
       }
@@ -144,17 +186,69 @@ export class BackgroundService {
       case 'toggleConfig': {
         const toggledConfig = await this.enqueueConfigTask(async () => {
           const toggled = await this.configService.toggleConfig(data.id, data.enabled);
+          await this.configService.updateNetworkRules();
           await this.updateActionState();
           return toggled;
         });
         sendResponse({
           success: true,
-          data: toggledConfig
+          data: this.serializeProfile(toggledConfig)
+        });
+        break;
+      }
+
+      case 'createProfile': {
+        const profile = await this.enqueueConfigTask(async () => {
+          const created = await this.configService.createProfile();
+          await this.configService.updateNetworkRules();
+          await this.updateActionState();
+          return created;
+        });
+        sendResponse({ success: true, data: this.serializeProfile(profile) });
+        break;
+      }
+
+      case 'duplicateProfile': {
+        const profile = await this.enqueueConfigTask(async () => {
+          const duplicate = await this.configService.duplicateConfig(data.id);
+          await this.configService.updateNetworkRules();
+          await this.updateActionState();
+          return duplicate;
+        });
+        sendResponse({ success: true, data: this.serializeProfile(profile) });
+        break;
+      }
+
+      case 'deleteProfile': {
+        const deleted = await this.enqueueConfigTask(async () => {
+          const removed = await this.configService.deleteConfig(data.id);
+          await this.configService.updateNetworkRules();
+          await this.updateActionState();
+          return removed;
+        });
+        sendResponse({
+          success: true,
+          data: {
+            deletedId: deleted.id,
+            state: this.serializeProfileState(this.configService.getProfileState())
+          }
+        });
+        break;
+      }
+
+      case 'selectProfile': {
+        const state = await this.enqueueConfigTask(() =>
+          this.configService.selectProfile(data.id)
+        );
+        sendResponse({
+          success: true,
+          data: this.serializeProfileState(state)
         });
         break;
       }
 
       case 'importSharedKV': {
+        this.assertSharedPayloadSize(data);
         const list = Array.isArray(data?.h) ? data.h : [];
         const candidate = list
           .filter(it => Array.isArray(it) && String(it[0] || '').trim())
@@ -172,7 +266,7 @@ export class BackgroundService {
         // own restrictions at rule time anyway.
         const bad = [];
         candidate.forEach((h, i) => {
-          if (!/^[a-zA-Z0-9!#$&'*+.^_`|~-]+$/.test(h.name)) {
+          if (ValidationUtils.validateHeaderName(h.name).length) {
             bad.push(`#${i + 1} "${h.name}": invalid header name`);
           }
           const valErrs = ValidationUtils.validateHeaderValue(h.value);
@@ -183,21 +277,27 @@ export class BackgroundService {
           break;
         }
 
-        // Apply to the single active config (one-click UX): replace its headers
-        // and enable. Only reached after the S3 validation gate above.
-        const updated = await this.enqueueConfigTask(async () => {
-          let configs = this.configService.getAllConfigs();
-          if (!configs || configs.length === 0) {
-            await this.configService.addConfig({ name: 'Default', enabled: false, headers: [], scope: { type: 'all', value: '' } });
-            configs = this.configService.getAllConfigs();
-          }
-          const first = configs[0];
-          const result = await this.configService.updateConfig(first.id, { headers: candidate, enabled: true });
+        const imported = await this.enqueueConfigTask(async () => {
+          const result = await this.configService.importConfig({
+            name: this.importedProfileName(data?.name),
+            active: true,
+            headers: candidate,
+            scope: { type: 'all', value: '' }
+          });
           await this.configService.updateNetworkRules();
           await this.updateActionState();
+          if (result.id) await this.configService.selectProfile(result.id);
           return result;
         });
-        sendResponse({ success: true, data: updated });
+        sendResponse({ success: true, data: this.serializeProfile(imported) });
+        await this.openPopupAfterImport();
+        break;
+      }
+
+      case 'importSharedProfile': {
+        const imported = await this.importSharedProfile(data);
+        sendResponse({ success: true, data: this.serializeProfile(imported) });
+        await this.openPopupAfterImport();
         break;
       }
 
@@ -217,6 +317,137 @@ export class BackgroundService {
     }
   }
 
+  importedProfileName(suggestedName) {
+    const base = String(suggestedName || '').trim();
+    const replaceableId =
+      this.configService.replaceableEmptyProfile?.()?.id;
+    const names = new Set(
+      this.configService.getAllConfigs()
+        .filter(profile => !replaceableId || profile?.id !== replaceableId)
+        .map(profile => String(profile?.name || '').trim().toLowerCase())
+        .filter(Boolean)
+    );
+
+    const nextDefaultName = () => {
+      let index = 1;
+      while (names.has(`profile ${index}`)) index += 1;
+      return `Profile ${index}`;
+    };
+
+    if (!base) return nextDefaultName();
+    if (!names.has(base.toLowerCase())) return base;
+
+    // Avoid awkward names such as "Profile 1 2". A shared default name joins
+    // the same sequence used when creating a Profile locally.
+    if (/^profile \d+$/i.test(base)) return nextDefaultName();
+
+    let index = 2;
+    while (names.has(`${base} ${index}`.toLowerCase())) index += 1;
+    return `${base} ${index}`;
+  }
+
+  async openPopupAfterImport() {
+    const openPopup = globalThis.chrome?.action?.openPopup;
+    if (typeof openPopup !== 'function') return false;
+    try {
+      await openPopup.call(globalThis.chrome.action);
+      return true;
+    } catch (error) {
+      console.warn('Imported Profile, but could not open popup:', error?.message || error);
+      return false;
+    }
+  }
+
+  assertSharedPayloadSize(data) {
+    if (serializedUtf8Size(data || {}) > RequestFilterLimits.MAX_SHARED_PROFILE_BYTES) {
+      throw new Error(
+        `Shared Profile must be ${RequestFilterLimits.MAX_SHARED_PROFILE_BYTES / 1024}KB or smaller`
+      );
+    }
+  }
+
+  async importSharedProfile(data) {
+    this.assertSharedPayloadSize(data);
+    const compact = data?.v === 2 && Array.isArray(data?.h);
+    const profile = compact ? null : (data?.profile || {});
+    const rawHeaders = compact
+      ? data.h.map(header => Array.isArray(header)
+        ? { name: header[0], value: header[1], enabled: true }
+        : header)
+      : (Array.isArray(profile.headers) ? profile.headers : []);
+    const headers = rawHeaders
+      .filter(header => String(header?.name || '').trim())
+      .map(header => ({
+        name: String(header.name).trim(),
+        value: String(header.value ?? ''),
+        enabled: header.enabled !== false,
+        type: 'request'
+      }));
+
+    if (!headers.length) throw new Error('No valid headers in shared Profile');
+    headers.forEach(header => {
+      if (ValidationUtils.validateHeaderName(header.name).length) {
+        throw new Error(`Invalid header name: ${header.name}`);
+      }
+      const errors = ValidationUtils.validateHeaderValue(header.value);
+      if (errors.length) throw new Error(errors.join(', '));
+    });
+
+    let filters;
+    if (compact) {
+      filters = (Array.isArray(data.f) ? data.f : []).map(filter =>
+        normalizeRequestMatch(Array.isArray(filter)
+          ? {
+            expression: String(filter[0] || ''),
+            enabled: filter[1] !== false
+          }
+          : {
+            expression: String(filter?.expression || ''),
+            enabled: filter?.enabled !== false
+          })
+      );
+    } else {
+      const scope = profile.requestScope || { type: 'allRequests', filters: [] };
+      if (!['allRequests', 'filtered', 'noUrls'].includes(scope.type)) {
+        throw new Error('Invalid request scope');
+      }
+      filters = ['filtered', 'noUrls'].includes(scope.type)
+        ? (Array.isArray(scope.filters) ? scope.filters : []).map(filter =>
+          normalizeRequestMatch({
+            expression: String(filter?.expression || ''),
+            enabled: filter?.enabled !== false
+          })
+        )
+        : [];
+      if (scope.type !== 'allRequests' && !filters.length) {
+        throw new Error('Filtered Profile must include at least one filter');
+      }
+    }
+    const invalidFilter = filters.find(filter => !filter.validation?.valid);
+    if (invalidFilter) {
+      throw new Error(invalidFilter.validation?.reason || 'Invalid request filter');
+    }
+    if (filters.length > RequestFilterLimits.MAX_FILTERS_PER_PROFILE) {
+      throw new Error(
+        `A Profile can use up to ${RequestFilterLimits.MAX_FILTERS_PER_PROFILE} filters`
+      );
+    }
+    await this.configService.assertRequestMatchesSupported?.(filters);
+
+    return this.enqueueConfigTask(async () => {
+      const imported = await this.configService.importConfig({
+        name: this.importedProfileName(compact ? data.n : profile.suggestedName),
+        active: true,
+        headers,
+        filters
+      });
+      await this.configService.updateNetworkRules();
+      await this.updateActionState();
+      if (imported.id) await this.configService.selectProfile(imported.id);
+      return imported;
+    });
+  }
+
   // On configs changed
   async handleConfigsChanged() {
     try {
@@ -234,68 +465,25 @@ export class BackgroundService {
     }
   }
 
-  // Tab updated
-  handleTabUpdated(tab) {
-    // Example: check scope match
-    const enabledConfigs = this.configService.getEnabledConfigs();
-    const matchingConfigs = enabledConfigs.filter(config => {
-      return this.isUrlMatchingScope(tab.url, config.scope);
-    });
-
-    if (matchingConfigs.length > 0) {
-      this.updateBadge(tab.id, matchingConfigs.length);
-    }
-  }
-
-  // URL match helper
-  isUrlMatchingScope(url, scope) {
-    try {
-      const urlObj = new URL(url);
-
-      if (scope.type === 'domain') {
-        return urlObj.hostname === scope.value || urlObj.hostname.endsWith('.' + scope.value);
-      } else if (scope.type === 'url_prefix') {
-        return url.startsWith(scope.value);
-      }
-
-      return false;
-    } catch (error) {
-      return false;
-    }
-  }
-
-  // Badge
-  updateBadge(tabId, count) {
-    if (count > 0) {
-      chrome.action.setBadgeText({
-        text: count.toString(),
-        tabId: tabId
-      });
-      chrome.action.setBadgeBackgroundColor({
-        color: '#4CAF50',
-        tabId: tabId
-      });
-    } else {
-      chrome.action.setBadgeText({
-        text: '',
-        tabId: tabId
-      });
-    }
-  }
-
   // Update toolbar icon and title to reflect active/paused state
   async updateActionState() {
     try {
       const configs = this.configService.getAllConfigs();
       const enabledHeadersCount = configs
-        .filter(c => c.enabled)
+        .filter(c => c.active)
         .flatMap(c => c.headers || [])
-        .filter(h => h && h.enabled !== false && (h.name || '').trim()).length;
+        .filter(h =>
+          h
+          && h.enabled !== false
+          && !ValidationUtils.validateHeaderName(h.name).length
+          && !ValidationUtils.validateHeaderValue(h.value).length
+        ).length;
 
       const isActive = enabledHeadersCount > 0;
       const title = isActive
         ? `VibeHeader — Active (${enabledHeadersCount} headers)`
         : 'VibeHeader — Ready (add a header)';
+      await chrome.action.setBadgeText({ text: '' });
       await chrome.action.setTitle({ title });
 
       const basePath = 'icons';

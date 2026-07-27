@@ -1,6 +1,6 @@
 {
   "name": "vibeheader",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Lightweight, ad-free HTTP header editor for Chrome with one-click shareable configs. A clean ModHeader alternative.",
   "scripts": {
     "dev": "BUILD_ENV=dev rollup -c --watch",
@@ -61,6 +61,14 @@
       "src/**/*.js",
       "!src/**/*.test.js"
     ],
+    "coverageThreshold": {
+      "global": {
+        "branches": 50,
+        "functions": 60,
+        "lines": 60,
+        "statements": 60
+      }
+    },
     "coverageDirectory": "coverage",
     "coverageReporters": [
       "text",
