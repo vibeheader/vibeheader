@@ -3,6 +3,19 @@
  */
 export class ValidationUtils {
   /**
+   * Validate an HTTP header field name using the RFC token characters accepted
+   * by Chrome's declarativeNetRequest API.
+   */
+  static validateHeaderName(name) {
+    const value = String(name || '').trim();
+    if (!value) return ['Header name is required'];
+    if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(value)) {
+      return ['Header name contains invalid characters'];
+    }
+    return [];
+  }
+
+  /**
    * Validate an HTTP header value: reject control characters (which would allow
    * header/CRLF injection) and values over the length limit.
    */
