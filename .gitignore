@@ -47,6 +47,8 @@ temp/
 coverage/
 .nyc_output
 *.lcov
+playwright-report/
+test-results/
 
 # Caches
 .cache/

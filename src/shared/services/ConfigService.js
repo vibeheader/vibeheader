@@ -82,22 +82,22 @@ export class ConfigService {
    * Rebuild the dynamic DNR rules from the currently enabled configs.
    */
   async updateNetworkRules() {
-    // Serialize DNR updates to avoid concurrent add/remove races that cause duplicate IDs
-    this._ruleUpdatePromise = this._ruleUpdatePromise.then(async () => {
+    // A rejected update must not poison the queue forever; later edits should
+    // still be able to repair the runtime rules.
+    this._ruleUpdatePromise = this._ruleUpdatePromise.catch(() => {}).then(async () => {
       try {
         const enabledConfigs = this.getEnabledConfigs();
 
         // Remove existing dynamic rules first
         const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
         const ruleIds = existingRules.map(rule => rule.id);
-        if (ruleIds.length > 0) {
-          await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: ruleIds });
-        }
-
-        // Build and add new rules
         const newRules = this.buildDnrRules(enabledConfigs);
-        if (newRules.length > 0) {
-          await chrome.declarativeNetRequest.updateDynamicRules({ addRules: newRules });
+        // Replace rules atomically so requests cannot land in a remove/add gap.
+        if (ruleIds.length > 0 || newRules.length > 0) {
+          await chrome.declarativeNetRequest.updateDynamicRules({
+            removeRuleIds: ruleIds,
+            addRules: newRules
+          });
         }
       } catch (error) {
         console.error('Failed to update network rules:', error);
