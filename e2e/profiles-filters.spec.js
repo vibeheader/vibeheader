@@ -150,6 +150,9 @@ test('runs multiple Profiles and limits one Profile with a Filter', async ({
   await configBarrier(popup);
 
   await popup.locator('.vh-h-name').fill('X-Profile-One');
+  await popup.locator('.vh-filter-enabled').uncheck();
+  await expect(popup.locator('#filtersSummary .vh-filter-summary-value'))
+    .toHaveText('All requests');
   await configBarrier(popup);
   await popup.locator('#profileTrigger').click();
   await popup.locator('.vh-profile-select').first().click();
@@ -161,10 +164,11 @@ test('runs multiple Profiles and limits one Profile with a Filter', async ({
 
   await popup.locator('#profileTrigger').click();
   await popup.locator('.vh-profile-select').last().click();
+  await popup.locator('#filtersSummary').click();
+  await popup.locator('.vh-filter-enabled').check();
   await popup.locator('.vh-h-name').fill('X-Profile-Two');
   await configBarrier(popup);
 
-  await popup.locator('#filtersSummary').click();
   await popup.locator('.vh-h-value').click();
   await expect(filterInput).toHaveValue(`${echoOrigin}/matched*`);
   const controlCenters = await popup.evaluate(() => {
@@ -229,6 +233,24 @@ test('runs multiple Profiles and limits one Profile with a Filter', async ({
   expect(body.headers['x-profile-two']).toBe('two');
 
   response = await requestPage.goto(`${echoOrigin}/outside`);
+  body = await response.json();
+  expect(body.headers['x-profile-one']).toBe('one');
+  expect(body.headers['x-profile-two']).toBeUndefined();
+
+  await popup.locator('.vh-filter-enabled').uncheck();
+  await expect(popup.locator('#filtersSummary .vh-filter-summary-value'))
+    .toHaveText('All requests');
+  await expect(popup.locator('#filtersSummary .vh-tag-on'))
+    .toHaveText('Active on this tab');
+  await configBarrier(popup);
+  response = await requestPage.goto(`${echoOrigin}/outside?filter=disabled`);
+  body = await response.json();
+  expect(body.headers['x-profile-one']).toBe('one');
+  expect(body.headers['x-profile-two']).toBe('two');
+
+  await popup.locator('.vh-filter-enabled').check();
+  await configBarrier(popup);
+  response = await requestPage.goto(`${echoOrigin}/outside?filter=enabled`);
   body = await response.json();
   expect(body.headers['x-profile-one']).toBe('one');
   expect(body.headers['x-profile-two']).toBeUndefined();

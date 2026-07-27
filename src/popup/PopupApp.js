@@ -62,17 +62,21 @@ function selectorValue(value) {
   return String(value || '').replace(/["\\]/g, '\\$&');
 }
 
+function activeRequestFilters(filters = []) {
+  return filters
+    .map(normalizeRequestMatch)
+    .filter(filter =>
+      filter.enabled !== false
+      && String(filter.expression || '').trim()
+      && filter.validation.valid
+    );
+}
+
 function requestScope(profile) {
-  const entered = (profile?.filters || []).filter(filter =>
-    String(filter.expression || '').trim()
-  );
-  if (!entered.length) return { all: true, filters: [] };
-  return {
-    all: false,
-    filters: entered.filter(filter =>
-      filter.enabled !== false && normalizeRequestMatch(filter).validation.valid
-    )
-  };
+  const filters = activeRequestFilters(profile?.filters || []);
+  return filters.length
+    ? { all: false, filters }
+    : { all: true, filters: [] };
 }
 
 function representativeUrl(filter) {
@@ -490,49 +494,29 @@ export class PopupApp {
   }
 
   filterSummaryText() {
-    const entered = this.config.filters.filter(filter =>
-      String(filter.expression || '').trim()
-    );
-    if (!entered.length) return 'All requests';
-    const validEntered = entered.filter(filter =>
-      normalizeRequestMatch(filter).validation.valid
-    );
-    if (!validEntered.length) return 'All requests';
-    const valid = validEntered.filter(filter => filter.enabled !== false);
-    if (valid.length) {
-      return `${String(valid[0].expression).trim()}${valid.length > 1 ? `  +${valid.length - 1}` : ''}`;
+    const active = activeRequestFilters(this.config.filters);
+    if (active.length) {
+      return `${String(active[0].expression).trim()}${active.length > 1 ? `  +${active.length - 1}` : ''}`;
     }
-    return 'No active filters';
+    return 'All requests';
   }
 
   filterTabTag() {
     const paused = getPopupUiState(this.config).paused;
-    const entered = this.config.filters.filter(filter =>
-      String(filter.expression || '').trim()
-    );
-    const validEntered = entered.filter(filter =>
-      normalizeRequestMatch(filter).validation.valid
-    );
-    const enabled = validEntered.filter(filter =>
-      filter.enabled !== false
-    );
+    const active = activeRequestFilters(this.config.filters);
     if (paused) return '<span class="vh-tag vh-tag-paused">Paused</span>';
-    if (!validEntered.length) {
+    if (!active.length) {
       return '<span class="vh-tag vh-tag-on"><i></i>Active on this tab</span>';
-    }
-    if (!enabled.length) {
-      return '<span class="vh-tag vh-tag-off"><i></i>Not on this tab</span>';
     }
     if (!this.currentTabUrl) {
       return '<span class="vh-tag vh-tag-off"><i></i>Not on this tab</span>';
     }
-    const normalized = enabled.map(normalizeRequestMatch);
-    if (normalized
+    if (active
       .filter(filter => filter.effectiveType !== 'regex')
       .some(filter => requestMatchMatchesUrl(filter, this.currentTabUrl))) {
       return '<span class="vh-tag vh-tag-on"><i></i>Active on this tab</span>';
     }
-    if (normalized.some(filter => filter.effectiveType === 'regex')) {
+    if (active.some(filter => filter.effectiveType === 'regex')) {
       // Precise Regex matching is available in the isolated URL tester. The
       // passive tab badge must never run a user pattern on the UI thread.
       return '<span class="vh-tag vh-tag-on"><i></i>Active with regex</span>';
@@ -547,7 +531,8 @@ export class PopupApp {
       && this.testSubmitted
       && !this.testPending
       && !this.testError
-      && !!testUrl;
+      && !!testUrl
+      && activeRequestFilters(this.config.filters).length > 0;
     return this.config.filters.map((filter, index) => {
       const expression = String(filter.expression || '');
       const normalized = normalizeRequestMatch(filter);
@@ -1132,12 +1117,10 @@ export class PopupApp {
   }
 
   runFilterTestSynchronously(testUrl) {
-    const hasRegex = this.config.filters.some(filter => {
-      const normalized = normalizeRequestMatch(filter);
-      return normalized.enabled !== false
-        && normalized.validation.valid
-        && normalized.effectiveType === 'regex';
-    });
+    const active = activeRequestFilters(this.config.filters);
+    const hasRegex = active.some(filter =>
+      filter.effectiveType === 'regex'
+    );
     if (hasRegex) {
       this.testPending = false;
       this.testError = 'Regex testing is unavailable';
@@ -1183,6 +1166,10 @@ export class PopupApp {
 
     const testUrl = this.normalizedTestUrl(this.testValue);
     if (!testUrl) {
+      this.renderFilters();
+      return;
+    }
+    if (!activeRequestFilters(this.config.filters).length) {
       this.renderFilters();
       return;
     }
@@ -1275,6 +1262,12 @@ export class PopupApp {
     if (!this.validTestUrl(this.testValue)) {
       this.$testerInput.setAttribute('aria-invalid', 'true');
       this.$testerResult.textContent = 'Enter a valid URL or domain';
+      return;
+    }
+    if (!activeRequestFilters(this.config.filters).length) {
+      this.$testerResult.classList.add('is-match');
+      this.$testerResult.innerHTML =
+        `${ICON.check}<span>Matches all requests — no active filters</span>`;
       return;
     }
     const count = this.testMatchedFilterIds.size;

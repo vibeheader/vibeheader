@@ -517,15 +517,17 @@ export function getUserRequestMatches(rule) {
 
 export function ensureRequestMatches(matches = []) {
   const normalized = matches.map(normalizeRequestMatch);
-  if (!normalized.length) return [createAllRequestsMatch()];
-  if (normalized.some(isAllRequestsMatch)) return normalized;
-
-  const hasValidEnteredFilter = normalized.some(match =>
-    String(match.expression || '').trim() && match.validation?.valid
+  const userMatches = normalized.filter(match => !isAllRequestsMatch(match));
+  const activeMatches = userMatches.filter(match =>
+    match.enabled !== false
+    && String(match.expression || '').trim()
+    && match.validation?.valid
   );
-  return hasValidEnteredFilter
-    ? normalized
-    : [createAllRequestsMatch(), ...normalized];
+  if (activeMatches.length) return userMatches;
+
+  const allRequests = normalized.find(isAllRequestsMatch)
+    || createAllRequestsMatch();
+  return [allRequests, ...userMatches];
 }
 
 function regexCondition(source, caseSensitive, resourceTypes) {
