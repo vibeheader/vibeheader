@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "VibeHeader",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Lightweight, ad-free HTTP header editor with one-click share links. A clean ModHeader alternative.",
   "permissions": [
     "storage",
