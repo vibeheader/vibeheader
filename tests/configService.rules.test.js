@@ -1,7 +1,21 @@
 import { Config } from '../src/shared/models/Config.js';
 import { ConfigService } from '../src/shared/services/ConfigService.js';
 
-const RESOURCE_TYPES = ['main_frame', 'sub_frame', 'xmlhttprequest'];
+const RESOURCE_TYPES = [
+  'main_frame',
+  'sub_frame',
+  'stylesheet',
+  'script',
+  'image',
+  'font',
+  'object',
+  'xmlhttprequest',
+  'ping',
+  'csp_report',
+  'media',
+  'websocket',
+  'other'
+];
 
 describe('ConfigService buildDnrRules', () => {
   test('builds rules for domain scope with request header', () => {
@@ -22,6 +36,25 @@ describe('ConfigService buildDnrRules', () => {
       isUrlFilterCaseSensitive: false,
       resourceTypes: RESOURCE_TYPES
     });
+  });
+
+  test('applies Header actions to document and subresource requests by default', () => {
+    const svc = new ConfigService();
+    const cfg = new Config({
+      active: true,
+      headers: [{ name: 'X-Canary', value: 'enabled', enabled: true }]
+    });
+
+    const [rule] = svc.buildDnrRules([cfg]);
+    expect(rule.condition.resourceTypes).toEqual(RESOURCE_TYPES);
+    expect(rule.condition.resourceTypes).toEqual(expect.arrayContaining([
+      'main_frame',
+      'stylesheet',
+      'script',
+      'image',
+      'media',
+      'xmlhttprequest'
+    ]));
   });
 
   test('builds rules for prefix scope with response header', () => {
