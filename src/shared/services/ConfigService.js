@@ -9,7 +9,24 @@ import {
 } from '../utils/requestFilters.js';
 import { ValidationUtils } from '../utils/validation.js';
 
-const RESOURCE_TYPES = ['main_frame', 'sub_frame', 'xmlhttprequest'];
+// Match every resource type supported by our Chrome/Edge 88 baseline. Keeping
+// this explicit also includes main-frame navigations, which Chrome excludes
+// from the native DNR default when resourceTypes is omitted.
+const RESOURCE_TYPES = [
+  'main_frame',
+  'sub_frame',
+  'stylesheet',
+  'script',
+  'image',
+  'font',
+  'object',
+  'xmlhttprequest',
+  'ping',
+  'csp_report',
+  'media',
+  'websocket',
+  'other'
+];
 const DEFAULT_POPUP_STATE = {
   selectedProfileId: '',
   profileModeActivated: false
