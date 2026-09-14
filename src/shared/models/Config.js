@@ -20,6 +20,7 @@ function normalizeHeaderAction(data = {}) {
     operation: data.operation || 'set',
     name: String(data.name || ''),
     value: String(data.value ?? ''),
+    comment: String(data.comment ?? ''),
     enabled: data.enabled !== false
   };
 }
@@ -113,6 +114,8 @@ export class Config {
         id: action.id,
         name: action.name,
         value: action.value,
+        comment: action.comment,
+        operation: action.operation,
         enabled: action.enabled,
         type: action.type === 'responseHeader' ? 'response' : 'request'
       }));

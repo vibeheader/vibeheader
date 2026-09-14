@@ -1,6 +1,6 @@
 {
   "name": "vibeheader",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Lightweight, ad-free HTTP header editor for Chrome with one-click shareable configs. A clean ModHeader alternative.",
   "scripts": {
     "dev": "BUILD_ENV=dev rollup -c --watch",
@@ -17,9 +17,9 @@
     "lint:fix": "eslint src --fix",
     "clean": "rimraf dist",
     "icons:gen": "node scripts/generate-icons.js",
-    "zip:prod": "BUILD_ENV=prod NODE_ENV=production rollup -c && node -e 'const {execSync}=require(\"child_process\"); const v=(require(\"./dist/manifest.json\").version)||\"\"; const cmd=\"rm -f vibeheader-\"+v+\".zip && zip -r vibeheader-\"+v+\".zip dist -x \\\"*.DS_Store\\\"\"; execSync(cmd,{stdio:\"inherit\"});'",
+    "zip:prod": "npm run clean && npm run build:prod && npm run zip:only",
     "zip": "npm run zip:prod",
-    "zip:only": "node -e 'const {execSync}=require(\"child_process\"); const v=(require(\"./dist/manifest.json\").version)||\"\"; const cmd=\"rm -f vibeheader-\"+v+\".zip && zip -r vibeheader-\"+v+\".zip dist -x \\\"*.DS_Store\\\"\"; execSync(cmd,{stdio:\"inherit\"});'"
+    "zip:only": "node scripts/package-extension.cjs"
   },
   "keywords": [
     "browser-extension",

@@ -1,4 +1,5 @@
 import { Config } from '../shared/models/Config.js';
+import { HeaderReorder } from './HeaderReorder.js';
 import {
   normalizeRequestMatch,
   RequestFilterLimits,
@@ -11,6 +12,8 @@ const FEEDBACK_URL = 'https://tally.so/r/44yrQX';
 const SHARE_URL = 'https://vibeheader.com/s#c=';
 
 const ICON = {
+  grip: '<svg viewBox="0 0 16 20" fill="currentColor" aria-hidden="true"><circle cx="5" cy="4" r="1.3"/><circle cx="11" cy="4" r="1.3"/><circle cx="5" cy="10" r="1.3"/><circle cx="11" cy="10" r="1.3"/><circle cx="5" cy="16" r="1.3"/><circle cx="11" cy="16" r="1.3"/></svg>',
+  reorder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4v16m-3-3 3 3 3-3M16 20V4m-3 3 3-3 3 3"/></svg>',
   pause: '<svg viewBox="0 0 24 24" class="vh-icon" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
   play: '<svg viewBox="0 0 24 24" class="vh-icon" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
   x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
@@ -179,6 +182,12 @@ export class PopupApp {
     this.renameLocation = null;
     this.renameDraft = '';
     this.touchedFilters = new Set();
+    this.showComments = false;
+    this._confirmedShowComments = false;
+    this._commentsRevision = 0;
+    this.commentsError = '';
+    this.reordering = false;
+    this.orderHistory = [];
 
     this._initialized = false;
     this._profileRevisions = new Map();
@@ -221,6 +230,10 @@ export class PopupApp {
     this.$addFilter = document.getElementById('addFilterBtn');
     this.$feedback = document.getElementById('feedbackLink');
     this.$menu = document.getElementById('profileMenu');
+    this.$reorderBar = document.getElementById('reorderBar');
+    this.$reorderDone = document.getElementById('reorderDone');
+    this.$reorderUndo = document.getElementById('reorderUndo');
+    this.$headerStatus = document.getElementById('headerStatus');
   }
 
   async init() {
@@ -273,7 +286,8 @@ export class PopupApp {
         profiles,
         selectedProfileId: stored?.popupState?.selectedProfileId || profiles[0]?.id || '',
         profileModeActivated: !!stored?.popupState?.profileModeActivated
-          || profiles.length > 1
+          || profiles.length > 1,
+        showComments: stored?.popupState?.showComments === true
       };
     } catch (_) {
       return { profiles: [], selectedProfileId: '', profileModeActivated: false };
@@ -281,6 +295,11 @@ export class PopupApp {
   }
 
   applyProfileState(state) {
+    // A profile-selection response can predate an optimistic preference toggle.
+    if (!this._commentsRevision && typeof state?.showComments === 'boolean') {
+      this.showComments = state.showComments;
+      this._confirmedShowComments = state.showComments;
+    }
     this.profiles = (state?.profiles || []).map(profile => new Config(profile));
     this.selectedProfileId = state?.selectedProfileId || this.profiles[0]?.id || '';
     this.profileModeActivated = !!state?.profileModeActivated
@@ -306,6 +325,7 @@ export class PopupApp {
         });
         if (response?.success) {
           state = {
+            ...state,
             profiles: [response.data],
             selectedProfileId: response.data.id,
             profileModeActivated: false
@@ -321,6 +341,7 @@ export class PopupApp {
         headers: []
       });
       state = {
+        ...state,
         profiles: [fallback.toJSON()],
         selectedProfileId: fallback.id,
         profileModeActivated: false
@@ -391,7 +412,11 @@ export class PopupApp {
 
   renderHeaders() {
     if (!this.$headers) return;
+    this.headerReorder?.cancel();
     const paused = getPopupUiState(this.config).paused;
+    this.$popup?.classList.toggle('is-reordering', this.reordering);
+    if (this.$reorderBar) this.$reorderBar.hidden = !this.reordering;
+    if (this.$reorderUndo) this.$reorderUndo.disabled = !this.orderHistory.length;
     this.$headers.innerHTML = this.config.headers.map((header, index) => {
       const overriding = findOverridingProfile(
         this.profiles,
@@ -403,6 +428,9 @@ export class PopupApp {
       return `
       <div class="vh-header-row ${overriding ? 'is-overridden' : ''}"
         data-header-id="${this.escape(header.id)}" data-index="${index}">
+        ${this.reordering ? `<button class="vh-header-grip" type="button"
+          aria-label="Move header ${index + 1}" title="Drag to reorder, or use arrow keys"
+          ${paused ? 'disabled' : ''}>${ICON.grip}</button>` : ''}
         <input type="checkbox" class="vh-h-enabled" ${header.enabled !== false ? 'checked' : ''}
           aria-label="Toggle header" ${paused ? 'disabled' : ''}>
         <input class="vh-input vh-h-name" placeholder="Name" value="${this.escape(header.name)}"
@@ -411,6 +439,9 @@ export class PopupApp {
           aria-label="Header value" ${paused ? 'disabled' : ''}>
         <button class="vh-del vh-del-header" type="button" aria-label="Delete header"
           title="Delete" ${paused ? 'disabled' : ''}>${ICON.x}</button>
+        ${this.showComments ? `<input class="vh-header-comment" placeholder="Add comment…"
+          value="${this.escape(header.comment)}" aria-label="Comment for header ${index + 1}"
+          ${paused ? 'disabled' : ''}>` : ''}
         <div class="vh-header-override" ${overriding ? '' : 'hidden'}>
           ${overriding
     ? `Overridden by “${this.escape(overriding.name)}” on matching requests`
@@ -677,6 +708,10 @@ export class PopupApp {
                     data-id="${this.escape(profile.id)}">${ICON.link}Copy link</button>
                   <button class="vh-menu-action vh-duplicate-profile" type="button"
                     data-id="${this.escape(profile.id)}">${ICON.copy}Duplicate</button>
+                  <button class="vh-menu-action vh-reorder-profile" type="button"
+                    data-id="${this.escape(profile.id)}"
+                    ${profile.headers.length < 2 || getPopupUiState(profile).paused ? 'disabled' : ''}>
+                    ${ICON.reorder}Reorder headers</button>
                   <button class="vh-menu-action is-danger vh-delete-profile" type="button"
                     data-id="${this.escape(profile.id)}">${ICON.trash}Delete</button>
                 </div>
@@ -687,6 +722,15 @@ export class PopupApp {
       </div>
       <div class="vh-menu-footer">
         <button class="vh-menu-action vh-new-profile" type="button">${ICON.plus}Add profile</button>
+      </div>
+      <div class="vh-display" role="group" aria-label="Display preferences">
+        <div class="vh-menu-heading">Display</div>
+        <button class="vh-menu-action vh-show-comments" role="menuitemcheckbox" type="button"
+          aria-label="Show comments" aria-checked="${this.showComments}">
+          <span class="vh-display-copy">Show comments<small>Across all profiles</small></span>
+          <span class="vh-display-check" aria-hidden="true">${this.showComments ? ICON.check : ''}</span>
+        </button>
+        ${this.commentsError ? `<p class="vh-display-error" role="alert">${this.escape(this.commentsError)}</p>` : ''}
       </div>
     `;
   }
@@ -737,6 +781,11 @@ export class PopupApp {
   }
 
   bindEvents() {
+    this.headerReorder = new HeaderReorder(this.$headers, (id, index) =>
+      this.moveHeader(id, index)
+    );
+    this.$reorderDone?.addEventListener('click', () => this.finishHeaderReorder());
+    this.$reorderUndo?.addEventListener('click', () => this.undoHeaderOrder());
     this.$addHeader?.addEventListener('click', () => this.addHeader());
     this.$addFilter?.addEventListener('click', () => this.addFilter());
     this.$toggle?.addEventListener('click', () =>
@@ -770,6 +819,11 @@ export class PopupApp {
     this.$testerRun?.addEventListener('click', () => this.runUrlTest());
 
     this.$headers?.addEventListener('input', event => {
+      if (event.target.matches('.vh-header-comment')) {
+        this.syncHeadersFromDom();
+        this.persistProfile(this.config);
+        return;
+      }
       if (event.target.matches('.vh-h-name, .vh-h-value')) {
         if (event.target.matches('.vh-h-name')) {
           const invalid = !!event.target.value.trim()
@@ -932,6 +986,11 @@ export class PopupApp {
   }
 
   async handleMenuClick(event) {
+    if (event.target.closest('button:disabled')) return;
+    if (event.target.closest('.vh-show-comments')) {
+      await this.setShowComments(!this.showComments);
+      return;
+    }
     const row = event.target.closest('[data-profile-id]');
     const id = row?.dataset.profileId
       || event.target.closest('[data-id]')?.dataset.id;
@@ -955,6 +1014,8 @@ export class PopupApp {
       this.closeMenu();
     } else if (event.target.closest('.vh-duplicate-profile')) {
       await this.duplicateProfile(id);
+    } else if (event.target.closest('.vh-reorder-profile')) {
+      await this.startHeaderReorder(id);
     } else if (event.target.closest('.vh-delete-profile')) {
       await this.confirmAndDeleteProfile(id);
     }
@@ -992,6 +1053,10 @@ export class PopupApp {
     if (event.key === 'Escape' && this.menuOpen) {
       this.closeMenu();
       this.$profileTrigger?.focus();
+    } else if (event.key === 'Escape' && this.headerReorder?.drag) {
+      this.headerReorder.cancel();
+    } else if (event.key === 'Escape' && this.reordering) {
+      this.finishHeaderReorder();
     } else if (event.key === 'Escape' && this.filtersOpen) {
       this.filtersOpen = false;
       this.closeTester(false);
@@ -999,15 +1064,115 @@ export class PopupApp {
     }
   }
 
+  async setShowComments(showComments) {
+    this.syncHeadersFromDom();
+    const revision = ++this._commentsRevision;
+    this.showComments = showComments;
+    this.commentsError = '';
+    this.renderHeaders();
+    this.renderMenu();
+    this.$menu?.querySelector('.vh-show-comments')?.focus();
+    try {
+      const response = await this.sendMessage({
+        action: 'setShowComments', data: { showComments }
+      });
+      if (!response?.success) throw new Error('Could not save display preference. Try again.');
+      this._confirmedShowComments = showComments;
+    } catch (_) {
+      if (revision !== this._commentsRevision) return;
+      this.syncHeadersFromDom();
+      this.showComments = this._confirmedShowComments;
+      this.commentsError = 'Could not save display preference. Try again.';
+      this.renderHeaders();
+      this.renderMenu();
+      this.$menu?.querySelector('.vh-show-comments')?.focus();
+    }
+  }
+
+  async startHeaderReorder(id) {
+    await this.selectProfile(id);
+    if (this.config?.id !== id || this.config.headers.length < 2
+      || getPopupUiState(this.config).paused) return;
+    this.syncHeadersFromDom();
+    this.reordering = true;
+    this.orderHistory = [];
+    this.closeMenu();
+    this.renderHeaders();
+    this.$headers?.querySelector('.vh-header-grip')?.focus();
+  }
+
+  finishHeaderReorder() {
+    this.reordering = false;
+    this.orderHistory = [];
+    this.renderHeaders();
+    this.$profileTrigger?.focus();
+  }
+
+  moveHeader(id, destination) {
+    if (!this.reordering || getPopupUiState(this.config).paused) return;
+    this.syncHeadersFromDom();
+    const ids = this.config.headers.map(header => header.id);
+    const from = ids.indexOf(id);
+    const to = Math.max(0, Math.min(ids.length - 1, destination));
+    if (from < 0 || from === to) return;
+    this.orderHistory.push([...ids]);
+    ids.splice(from, 1);
+    ids.splice(to, 0, id);
+    this.saveHeaderOrder(ids, id);
+    const announcement = document.getElementById('headerAnnouncement');
+    if (announcement) announcement.textContent = `Header moved to position ${to + 1} of ${ids.length}.`;
+  }
+
+  undoHeaderOrder() {
+    if (!this.reordering || getPopupUiState(this.config).paused) return;
+    this.syncHeadersFromDom();
+    const ids = this.orderHistory.pop();
+    if (ids) this.saveHeaderOrder(ids);
+  }
+
+  saveHeaderOrder(ids, focusId) {
+    const profileId = this.config.id;
+    const previous = this.config.headers.map(header => header.id);
+    const applyOrder = order => {
+      const headers = this.config.headers;
+      const byId = new Map(headers.map(header => [header.id, header]));
+      this.config.headers = [
+        ...order.map(id => byId.get(id)).filter(Boolean),
+        ...headers.filter(header => !order.includes(header.id))
+      ];
+    };
+    applyOrder(ids);
+    if (this.$headerStatus) this.$headerStatus.textContent = '';
+    this.renderHeaders();
+    if (focusId) {
+      this.$headers?.querySelector(
+        `[data-header-id="${selectorValue(focusId)}"] .vh-header-grip`
+      )?.focus();
+    }
+    const mutation = this.persistProfile(this.config);
+    const revision = this.currentRevision(profileId);
+    mutation.then(response => {
+      if (response?.success || this.config.id !== profileId
+        || this.currentRevision(profileId) !== revision) return;
+      applyOrder(previous);
+      this.orderHistory = [];
+      this.renderHeaders();
+      if (this.$headerStatus) this.$headerStatus.textContent = 'Could not save order. Please try again.';
+    });
+  }
+
   syncHeadersFromDom() {
     if (!this.$headers || !this.config) return;
     const rows = [...this.$headers.querySelectorAll('.vh-header-row')];
     if (!rows.length) return;
+    const existing = new Map(this.config.headers.map(header => [header.id, header]));
     this.config.headers = rows.map(row => ({
+      ...existing.get(row.dataset.headerId),
       id: row.dataset.headerId,
-      type: 'request',
       name: row.querySelector('.vh-h-name')?.value || '',
       value: row.querySelector('.vh-h-value')?.value || '',
+      comment: row.querySelector('.vh-header-comment')?.value
+        ?? existing.get(row.dataset.headerId)?.comment ?? '',
       enabled: !!row.querySelector('.vh-h-enabled')?.checked
     }));
   }
@@ -1018,7 +1183,7 @@ export class PopupApp {
     const headers = this.config.headers;
     headers.push({ name: '', value: '', enabled: true, type: 'request' });
     this.config.headers = headers;
-    this._pendingHeaderFocus = this.config.headers.at(-1).id;
+    this._pendingHeaderFocus = this.config.headers[headers.length - 1].id;
     this.renderHeaders();
     this.persistProfile(this.config);
   }
@@ -1026,6 +1191,7 @@ export class PopupApp {
   deleteHeader(id) {
     if (!id || getPopupUiState(this.config).paused) return;
     this.syncHeadersFromDom();
+    this.orderHistory = [];
     this.config.headers = this.config.headers.filter(header => header.id !== id);
     this.ensureHeaderInput(this.config);
     this.renderHeaders();
@@ -1044,7 +1210,7 @@ export class PopupApp {
     this.testerOpen = false;
     this.testValue = '';
     this.testSubmitted = false;
-    this._pendingFilterFocus = this.config.filters.at(-1).id;
+    this._pendingFilterFocus = this.config.filters[filters.length - 1].id;
     this.renderFilters();
     this.persistProfile(this.config);
   }
@@ -1294,6 +1460,10 @@ export class PopupApp {
   }
 
   resetProfileView() {
+    this.reordering = false;
+    this.orderHistory = [];
+    this.headerReorder?.cancel();
+    if (this.$headerStatus) this.$headerStatus.textContent = '';
     this.filtersOpen = false;
     this.closeTester(false);
     this.touchedFilters.clear();
@@ -1409,6 +1579,7 @@ export class PopupApp {
     const hasContent = profile.filters.length
       || profile.headers.some(header =>
         String(header.name || '').trim() || String(header.value || '').trim()
+        || String(header.comment || '').trim()
       );
     if (hasContent) {
       const confirmed = await this.confirmDialog({
@@ -1442,6 +1613,8 @@ export class PopupApp {
     const previous = profile.active;
     profile.active = !!active;
     if (!active && id === this.selectedProfileId) {
+      this.reordering = false;
+      this.orderHistory = [];
       this.filtersOpen = false;
       this.closeTester(false);
     }
@@ -1473,19 +1646,15 @@ export class PopupApp {
   }
 
   profileSharePayload(profile) {
+    const headers = profile.headers.filter(header =>
+      header.enabled !== false && header.type === 'request' && header.operation === 'set'
+      && !ValidationUtils.validateHeaderName(header.name).length
+      && !ValidationUtils.validateHeaderValue(header.value).length
+    );
     return {
       v: 2,
       n: profile.name,
-      h: profile.headers
-        .filter(header =>
-          header.enabled !== false
-          && !ValidationUtils.validateHeaderName(header.name).length
-          && !ValidationUtils.validateHeaderValue(header.value).length
-        )
-        .map(header => [
-          String(header.name).trim(),
-          String(header.value ?? '')
-        ]),
+      h: headers.map(header => [String(header.name).trim(), String(header.value ?? '')]),
       f: profile.filters
         .filter(filter =>
           String(filter.expression || '').trim()
@@ -1494,7 +1663,8 @@ export class PopupApp {
         .map(filter => [
           String(filter.expression).trim(),
           filter.enabled !== false
-        ])
+        ]),
+      ...(headers.some(header => header.comment) ? { c: headers.map(header => header.comment) } : {})
     };
   }
 

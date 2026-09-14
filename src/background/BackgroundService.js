@@ -1,4 +1,5 @@
 import { ConfigService } from '../shared/services/ConfigService.js';
+import { validateSharedProfileComments } from '../shared/utils/sharedProfile.js';
 import { ValidationUtils } from '../shared/utils/validation.js';
 import {
   normalizeRequestMatch,
@@ -152,6 +153,14 @@ export class BackgroundService {
           success: true,
           data: this.serializeProfileState(state)
         });
+        break;
+      }
+
+      case 'setShowComments': {
+        const preference = await this.enqueueConfigTask(() =>
+          this.configService.setShowComments(data?.showComments)
+        );
+        sendResponse({ success: true, data: preference });
         break;
       }
 
@@ -368,11 +377,16 @@ export class BackgroundService {
 
   async importSharedProfile(data) {
     this.assertSharedPayloadSize(data);
+    const withComments = Object.prototype.hasOwnProperty.call(data || {}, 'c');
+    if (withComments) validateSharedProfileComments(data);
     const compact = data?.v === 2 && Array.isArray(data?.h);
     const profile = compact ? null : (data?.profile || {});
     const rawHeaders = compact
-      ? data.h.map(header => Array.isArray(header)
-        ? { name: header[0], value: header[1], enabled: true }
+      ? data.h.map((header, index) => Array.isArray(header)
+        ? {
+          name: header[0], value: header[1], enabled: true,
+          ...(withComments ? { comment: data.c[index] } : {})
+        }
         : header)
       : (Array.isArray(profile.headers) ? profile.headers : []);
     const headers = rawHeaders
@@ -380,6 +394,7 @@ export class BackgroundService {
       .map(header => ({
         name: String(header.name).trim(),
         value: String(header.value ?? ''),
+        ...(withComments ? { comment: header.comment } : {}),
         enabled: header.enabled !== false,
         type: 'request'
       }));
@@ -444,6 +459,7 @@ export class BackgroundService {
       await this.configService.updateNetworkRules();
       await this.updateActionState();
       if (imported.id) await this.configService.selectProfile(imported.id);
+      if (withComments) await this.configService.revealImportedComments(imported);
       return imported;
     });
   }

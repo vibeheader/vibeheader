@@ -52,6 +52,8 @@ function renderShell() {
         <span id="pauseBannerText"></span>
       </div>
       <div id="headers"></div>
+      <div id="reorderBar" hidden><button id="reorderUndo">Undo</button><button id="reorderDone">Done</button></div>
+      <span id="headerAnnouncement"></span><p id="headerStatus"></p>
       <section id="filtersSection" hidden>
         <button id="filtersSummary"></button>
         <div id="filtersPanel" hidden>
@@ -75,6 +77,7 @@ function renderShell() {
 
 function installChromeMock(initialConfig, options = {}) {
   let persistedConfig = clone(initialConfig);
+  let showComments = options.showComments === true;
   const storageGet = options.storageGet || jest.fn(async () => ({
     configs: [clone(persistedConfig)]
   }));
@@ -86,11 +89,15 @@ function installChromeMock(initialConfig, options = {}) {
         data: {
           profiles: [clone(persistedConfig)],
           selectedProfileId: persistedConfig.id,
-          profileModeActivated: false
+          profileModeActivated: false,
+          showComments
         }
       };
     case 'getConfigs':
       return { success: true, data: [clone(persistedConfig)] };
+    case 'setShowComments':
+      showComments = message.data.showComments;
+      return { success: true, data: { showComments } };
     case 'addConfig':
       persistedConfig = makeConfig(message.data);
       return { success: true, data: clone(persistedConfig) };
@@ -144,6 +151,123 @@ function updateMessages(sendMessage) {
     .map(([message]) => message)
     .filter(message => message.action === 'updateConfig');
 }
+
+describe('optional Comments and temporary Header ordering', () => {
+  const headers = [
+    { id: 'first', name: 'X-Test', value: 'first', comment: 'Staging' },
+    { id: 'second', name: 'x-test', value: 'winner', comment: 'Production' }
+  ];
+
+  test('keeps the default view simple and preserves hidden comments during ordinary edits', async () => {
+    const { app, chromeMock } = await createApp(makeConfig({ enabled: true, headers }));
+    expect(document.querySelector('.vh-header-comment')).toBeNull();
+    expect(document.querySelector('.vh-header-grip')).toBeNull();
+    expect(document.getElementById('reorderBar').hidden).toBe(true);
+
+    document.getElementById('profileTrigger').click();
+    expect(document.querySelector('.vh-show-comments').getAttribute('aria-checked')).toBe('false');
+    await app.setShowComments(true);
+    expect(document.querySelector('.vh-header-comment').value).toBe('Staging');
+    const comment = document.querySelector('.vh-header-comment');
+    comment.value = 'QA environment';
+    comment.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(updateMessages(chromeMock.sendMessage).at(-1).data.config.headers[0].comment)
+      .toBe('QA environment');
+    await app._lastMutationPromise;
+
+    await app.setShowComments(false);
+    const value = document.querySelector('.vh-h-value');
+    value.value = 'changed';
+    value.dispatchEvent(new Event('input', { bubbles: true }));
+    await app._lastMutationPromise;
+    expect(app.config.headers[0].comment).toBe('QA environment');
+    await app.setShowComments(true);
+    expect(document.querySelector('.vh-header-comment').value).toBe('QA environment');
+    expect(app.profileSharePayload(app.config)).toEqual({
+      v: 2, n: 'Default',
+      h: [['X-Test', 'changed'], ['x-test', 'winner']], f: [],
+      c: ['QA environment', 'Production']
+    });
+  });
+
+  test('moves notes with rows and shares the natural Header order', async () => {
+    const { app } = await createApp(makeConfig({ enabled: true, headers }), { showComments: true });
+    await app.startHeaderReorder(app.config.id);
+    document.querySelector('.vh-header-grip')
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    await app._lastMutationPromise;
+    expect(app.config.headers.map(header => header.id)).toEqual(['second', 'first']);
+    expect([...document.querySelectorAll('.vh-header-comment')].map(input => input.value))
+      .toEqual(['Production', 'Staging']);
+    const shared = app.profileSharePayload(app.config);
+    expect(shared.h).toEqual([['x-test', 'winner'], ['X-Test', 'first']]);
+    expect(shared.c).toEqual(['Production', 'Staging']);
+    expect(Object.keys(shared).sort()).toEqual(['c', 'f', 'h', 'n', 'v']);
+    expect(document.activeElement.closest('.vh-header-row').dataset.headerId).toBe('first');
+
+    document.getElementById('reorderUndo').click();
+    await app._lastMutationPromise;
+    expect(app.config.headers.map(header => header.id)).toEqual(['first', 'second']);
+    expect(document.getElementById('reorderUndo').disabled).toBe(true);
+    document.getElementById('reorderDone').click();
+    expect(document.getElementById('reorderBar').hidden).toBe(true);
+    expect(document.querySelector('.vh-header-grip')).toBeNull();
+  });
+
+  test('restores the Comments preference and explains a failed save', async () => {
+    const { app, chromeMock } = await createApp(makeConfig({ enabled: true, headers }));
+    document.getElementById('profileTrigger').click();
+    chromeMock.sendMessage.mockResolvedValueOnce({ success: false, error: 'storage full' });
+    await app.setShowComments(true);
+    expect(app.showComments).toBe(false);
+    expect(document.querySelector('.vh-header-comment')).toBeNull();
+    expect(document.querySelector('.vh-display-error').textContent).toContain('Could not save');
+  });
+
+  test('a pending profile selection cannot replace a newer Comments preference', async () => {
+    const { app, chromeMock } = await createApp(makeConfig({ enabled: true, headers }));
+    const pending = deferred();
+    chromeMock.sendMessage.mockReturnValueOnce(pending.promise);
+    const preference = app.setShowComments(true);
+    app.applyProfileState({
+      profiles: [app.config.toJSON()], selectedProfileId: app.config.id, showComments: false
+    });
+    pending.resolve({ success: true, data: { showComments: true } });
+    await preference;
+    expect(app.showComments).toBe(true);
+    expect(app._confirmedShowComments).toBe(true);
+  });
+
+  test('comments and sorting preserve response Header types and operations from stored profiles', async () => {
+    const { app } = await createApp(makeConfig({ enabled: true, headers: [
+      { id: 'response', type: 'response', operation: 'remove', name: 'X-Response', value: '' },
+      { id: 'request', name: 'X-Request', value: 'keep' }
+    ] }));
+    await app.setShowComments(true);
+    const comment = document.querySelector('.vh-header-comment');
+    comment.value = 'Response debugging';
+    comment.dispatchEvent(new Event('input', { bubbles: true }));
+    await app._lastMutationPromise;
+    await app.startHeaderReorder(app.config.id);
+    app.moveHeader('response', 1);
+    await app._lastMutationPromise;
+    expect(app.config.primaryRule.actions.map(action => action.id)).toEqual(['request', 'response']);
+    expect(app.config.primaryRule.actions[1]).toEqual(expect.objectContaining({
+      id: 'response', type: 'responseHeader', operation: 'remove', comment: 'Response debugging'
+    }));
+  });
+
+  test('restores display order if saving the move fails', async () => {
+    const { app, chromeMock } = await createApp(makeConfig({ enabled: true, headers }));
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    await app.startHeaderReorder(app.config.id);
+    chromeMock.sendMessage.mockResolvedValueOnce({ success: false, error: 'storage full' });
+    app.moveHeader('first', 1);
+    await app._lastMutationPromise;
+    expect(app.config.headers.map(header => header.id)).toEqual(['first', 'second']);
+    expect(document.getElementById('headerStatus').textContent).toContain('Could not save order');
+  });
+});
 
 afterEach(() => {
   jest.useRealTimers();
