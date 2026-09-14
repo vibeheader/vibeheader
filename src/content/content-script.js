@@ -23,7 +23,7 @@
         type: 'VIBE_ACK',
         requestId: msg.requestId,
         protocols: [1, 2],
-        features: ['profiles', 'requestFilters', 'importAsNewProfile']
+        features: ['profiles', 'requestFilters', 'importAsNewProfile', 'headerComments']
       }, '*');
       return;
     }
@@ -33,7 +33,7 @@
         const res = await chrome.runtime.sendMessage({
           action: msg.v === 2 ? 'importSharedProfile' : 'importSharedKV',
           data: msg.v === 2
-            ? { v: 2, n: msg.n, h: msg.h, f: msg.f }
+            ? { v: 2, n: msg.n, h: msg.h, f: msg.f, ...(msg.c !== undefined ? { c: msg.c } : {}) }
             : { h: msg.h, name: msg.name }
         });
         window.postMessage({

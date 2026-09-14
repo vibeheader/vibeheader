@@ -220,6 +220,7 @@ button:disabled {
 
 .vh-header-row,
 .vh-filter-row {
+  position: relative;
   display: grid;
   grid-template-columns: 14px minmax(0, 1fr) minmax(0, 1fr) 28px;
   align-items: center;
@@ -244,6 +245,106 @@ button:disabled {
   border-color: #fca5a5;
   background: #fffafa;
 }
+
+.vh-header-comment {
+  grid-column: 2 / 4;
+  width: 100%;
+  height: 27px;
+  margin-top: 4px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--vh-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+}
+
+.vh-header-comment::placeholder { color: var(--vh-light); }
+.vh-header-comment:hover { border-color: var(--vh-border); }
+.vh-header-comment:focus {
+  outline: 0;
+  border-color: #c4b5fd;
+  background: #faf9ff;
+  color: #374151;
+  box-shadow: 0 0 0 2px #7c3aed12;
+}
+
+.vh-reorder-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 16px 5px;
+  padding: 7px 0 8px;
+  border-bottom: 1px solid #ede9f2;
+  font-size: 11px;
+  color: #7c6e91;
+}
+.vh-reorder-bar > span { flex: 1; }
+.vh-reorder-done {
+  border: 0;
+  padding: 4px 9px;
+  background: #f2edfc;
+  border-radius: 5px;
+  color: #6d28d9;
+  font-size: 11px;
+  font-weight: 600;
+}
+.vh-reorder-undo { border: 0; background: transparent; color: #7b7189; font-size: 11px; padding: 4px; }
+.vh-reorder-undo:disabled { color: #c3bdcc; }
+.is-reordering .vh-header-row,
+.vh-drag-ghost {
+  grid-template-columns: 18px 14px minmax(0, 1fr) minmax(0, 1fr) 28px;
+  column-gap: 6px;
+}
+.is-reordering .vh-header-comment,
+.is-reordering .vh-header-override,
+.vh-drag-ghost .vh-header-comment,
+.vh-drag-ghost .vh-header-override { grid-column: 3 / 5; }
+.vh-header-grip {
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  height: 28px;
+  width: 18px;
+  background: transparent;
+  color: #a5a0b1;
+  cursor: grab;
+  touch-action: none;
+  border-radius: 4px;
+}
+.vh-header-grip:hover { background: #f2edf9; color: var(--vh-brand); }
+.vh-header-grip:focus-visible { outline: 2px solid var(--vh-brand); outline-offset: 2px; }
+.vh-header-grip svg { width: 14px; height: 16px; }
+.vh-header-row.is-dragging { opacity: 0.22; }
+.vh-header-row.drop-before::before,
+.vh-header-row.drop-after::after {
+  content: '';
+  position: absolute;
+  height: 2px;
+  left: 0;
+  right: 0;
+  border-radius: 2px;
+  background: #8b5cf6;
+}
+.vh-header-row.drop-before::before { top: -6px; }
+.vh-header-row.drop-after::after { bottom: -6px; }
+.vh-drag-ghost {
+  position: fixed;
+  z-index: 200;
+  pointer-events: none;
+  margin: 0;
+  padding: 5px;
+  background: #fff;
+  border: 1px solid #c4b5fd;
+  border-radius: 9px;
+  box-shadow: 0 9px 25px #5b21b630;
+  opacity: 0.95;
+}
+.vh-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; clip: rect(0,0,0,0); overflow: hidden; white-space: nowrap; border: 0; }
+.vh-header-status { margin: 4px 16px; color: var(--vh-danger); font-size: 11px; }
+.vh-header-status:empty { display: none; }
 
 .vh-input {
   width: 100%;
@@ -842,7 +943,7 @@ button:disabled {
   z-index: 2;
   top: 42px;
   right: 4px;
-  width: 172px;
+  width: 185px;
   margin: 0;
   padding: 4px;
   border: 1px solid var(--vh-border);
@@ -904,6 +1005,17 @@ button:disabled {
   height: 13px;
   color: var(--vh-brand);
 }
+
+.vh-display { margin-top: 6px; padding-top: 6px; border-top: 1px solid #f0edf4; }
+.vh-show-comments { justify-content: space-between; padding: 8px; }
+.vh-display-copy { display: flex; flex-direction: column; gap: 3px; }
+.vh-display-copy small { color: var(--vh-light); font-size: 10.5px; font-weight: 400; }
+.vh-display-check { display: grid; place-items: center; width: 15px; height: 15px; border: 1px solid #cfd0d8; border-radius: 4px; background: #fff; }
+.vh-show-comments[aria-checked="true"] .vh-display-check { background: var(--vh-brand); border-color: var(--vh-brand); }
+.vh-display-check svg { color: #fff; width: 12px; height: 12px; }
+.vh-display-error { margin: 4px 8px 8px; color: var(--vh-danger); font-size: 11px; }
+.vh-menu-action:disabled { color: #b0abb9; cursor: default; }
+.vh-menu-action:disabled:hover { background: transparent; }
 
 .vh-overlay {
   position: fixed;

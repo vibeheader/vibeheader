@@ -20,7 +20,7 @@ describe('share-page content bridge', () => {
       data: {
         name: 'Imported Profile',
         active: true,
-        headers: [{ name: 'Authorization', value: 'secret' }],
+        headers: [{ name: 'Authorization', value: 'secret', comment: 'Saved note' }],
         filters: []
       }
     }));
@@ -37,7 +37,9 @@ describe('share-page content bridge', () => {
 
     expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
       type: 'VIBE_ACK',
-      requestId: 'ping-123'
+      requestId: 'ping-123',
+      protocols: [1, 2],
+      features: expect.arrayContaining(['headerComments'])
     }), '*');
 
     postMessage.mockClear();
@@ -50,12 +52,19 @@ describe('share-page content bridge', () => {
           v: 2,
           n: 'Imported Profile',
           h: [['X-Test', '1']],
-          f: []
+          f: [],
+          c: ['Server note']
         }
       }
     }));
     await Promise.resolve();
     await Promise.resolve();
+
+    expect(sendMessage).toHaveBeenCalledWith({
+      action: 'importSharedProfile',
+      data: { v: 2, n: 'Imported Profile', h: [['X-Test', '1']], f: [],
+        c: ['Server note'] }
+    });
 
     expect(postMessage).toHaveBeenCalledWith({
       type: 'VIBE_RESULT',
@@ -68,5 +77,19 @@ describe('share-page content bridge', () => {
       error: undefined
     }, '*');
     expect(postMessage.mock.calls[0][0]).not.toHaveProperty('headers');
+    expect(JSON.stringify(postMessage.mock.calls)).not.toContain('Saved note');
+
+    sendMessage.mockClear();
+    window.dispatchEvent(new MessageEvent('message', {
+      source: window,
+      data: { type: 'VIBE_IMPORT', v: 2, n: 'Legacy message envelope',
+        h: [['X-Test', '1']], f: [], c: ['Server note'] }
+    }));
+    await Promise.resolve();
+    expect(sendMessage).toHaveBeenCalledWith({
+      action: 'importSharedProfile',
+      data: { v: 2, n: 'Legacy message envelope', h: [['X-Test', '1']], f: [],
+        c: ['Server note'] }
+    });
   });
 });

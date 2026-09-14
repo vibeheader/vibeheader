@@ -29,7 +29,9 @@ const RESOURCE_TYPES = [
 ];
 const DEFAULT_POPUP_STATE = {
   selectedProfileId: '',
-  profileModeActivated: false
+  profileModeActivated: false,
+  showComments: false,
+  commentsPreferenceSet: false
 };
 
 function stableRuleId(parts, usedIds) {
@@ -89,7 +91,12 @@ export class ConfigService {
       const state = await this.storage.get('popupState');
       this.popupState = {
         ...DEFAULT_POPUP_STATE,
-        ...(state && typeof state === 'object' ? state : {})
+        ...(state && typeof state === 'object' ? state : {}),
+        // Older Comments builds did not record whether the switch was used.
+        // Preserve an existing choice; pre-Comments installs have no value.
+        commentsPreferenceSet: typeof state?.commentsPreferenceSet === 'boolean'
+          ? state.commentsPreferenceSet
+          : typeof state?.showComments === 'boolean'
       };
     } catch (error) {
       console.error('Failed to load popup state:', error);
@@ -129,7 +136,8 @@ export class ConfigService {
     return {
       profiles: this.configs,
       selectedProfileId: this.popupState.selectedProfileId,
-      profileModeActivated: !!this.popupState.profileModeActivated
+      profileModeActivated: !!this.popupState.profileModeActivated,
+      showComments: this.popupState.showComments === true
     };
   }
 
@@ -171,6 +179,7 @@ export class ConfigService {
       (rule.actions || []).some(action =>
         String(action?.name || '').trim()
         || String(action?.value || '')
+        || String(action?.comment || '')
       )
     );
     const hasFilterContent = (profile.rules || []).some(rule =>
@@ -219,7 +228,12 @@ export class ConfigService {
     this.assertProfileFilterLimit(merged);
     merged.updatedAt = Date.now();
     this.configs[configIndex] = merged;
-    await this.saveConfigs();
+    try {
+      await this.saveConfigs();
+    } catch (error) {
+      this.configs[configIndex] = current;
+      throw error;
+    }
     return merged;
   }
 
@@ -323,6 +337,37 @@ export class ConfigService {
     this.popupState.selectedProfileId = id;
     await this.savePopupState();
     return this.getProfileState();
+  }
+
+  async setShowComments(showComments) {
+    if (typeof showComments !== 'boolean') {
+      throw new Error('Show comments must be a boolean');
+    }
+    const previous = { ...this.popupState };
+    this.popupState.showComments = showComments;
+    this.popupState.commentsPreferenceSet = true;
+    try {
+      await this.savePopupState();
+    } catch (error) {
+      this.popupState = previous;
+      throw error;
+    }
+    return { showComments };
+  }
+
+  async revealImportedComments(profile) {
+    if (this.popupState.showComments || this.popupState.commentsPreferenceSet
+      || !profile.headers.some(header => String(header.comment || '').trim())) return;
+
+    // A successful import can reveal a useful default, but only a manual
+    // switch changes commentsPreferenceSet. Keep this out of shared Profiles.
+    this.popupState.showComments = true;
+    try {
+      await this.savePopupState();
+    } catch (error) {
+      this.popupState.showComments = false;
+      throw error;
+    }
   }
 
   getEnabledConfigs() {

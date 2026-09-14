@@ -44,6 +44,14 @@
       </div>
     </header>
 
+    <div id="reorderBar" class="vh-reorder-bar" hidden>
+      <span>Reorder headers</span>
+      <button id="reorderUndo" class="vh-reorder-undo" type="button" disabled>Undo</button>
+      <button id="reorderDone" class="vh-reorder-done" type="button">Done</button>
+    </div>
+    <span id="headerAnnouncement" class="vh-sr-only" role="status" aria-live="polite"></span>
+    <p id="headerStatus" class="vh-header-status" role="status"></p>
+
     <div id="pauseBanner" class="vh-pause-banner" hidden>
       <svg class="vh-pause-banner-icon" viewBox="0 0 24 24" fill="none"
         stroke="currentColor" stroke-width="2" stroke-linejoin="round"

@@ -311,7 +311,7 @@ test('runs multiple Profiles and limits one Profile with a Filter', async ({
 
   await popup.locator('#profileTrigger').click();
   await expect(popup.locator('.vh-profile-row')).toHaveCount(2);
-  await expect(popup.locator('.vh-menu-heading')).toHaveText('Profiles');
+  await expect(popup.locator('.vh-menu-heading')).toHaveText(['Profiles', 'Display']);
   await expect(popup.locator('.vh-menu-heading kbd')).toHaveCount(0);
   await expect(popup.locator('.vh-new-profile')).toHaveText('Add profile');
   const selectedMarker = await popup.locator('.vh-profile-row.is-selected .vh-profile-row-name')
