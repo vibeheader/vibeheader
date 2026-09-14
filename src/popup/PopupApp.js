@@ -417,7 +417,8 @@ export class PopupApp {
     this.$popup?.classList.toggle('is-reordering', this.reordering);
     if (this.$reorderBar) this.$reorderBar.hidden = !this.reordering;
     if (this.$reorderUndo) this.$reorderUndo.disabled = !this.orderHistory.length;
-    this.$headers.innerHTML = this.config.headers.map((header, index) => {
+    const headers = this.config.headers;
+    this.$headers.innerHTML = headers.map((header, index) => {
       const overriding = findOverridingProfile(
         this.profiles,
         this.config.id,
@@ -439,9 +440,6 @@ export class PopupApp {
           aria-label="Header value" ${paused ? 'disabled' : ''}>
         <button class="vh-del vh-del-header" type="button" aria-label="Delete header"
           title="Delete" ${paused ? 'disabled' : ''}>${ICON.x}</button>
-        ${this.showComments ? `<input class="vh-header-comment" placeholder="Add comment…"
-          value="${this.escape(header.comment)}" aria-label="Comment for header ${index + 1}"
-          ${paused ? 'disabled' : ''}>` : ''}
         <div class="vh-header-override" ${overriding ? '' : 'hidden'}>
           ${overriding
     ? `Overridden by “${this.escape(overriding.name)}” on matching requests`
@@ -450,6 +448,19 @@ export class PopupApp {
       </div>
     `;
     }).join('');
+
+    if (this.showComments) {
+      this.$headers.querySelectorAll('.vh-header-row').forEach((row, index) => {
+        const comment = document.createElement('input');
+        comment.type = 'text';
+        comment.className = 'vh-header-comment';
+        comment.placeholder = 'Add comment…';
+        comment.value = headers[index].comment;
+        comment.setAttribute('aria-label', `Comment for header ${index + 1}`);
+        comment.disabled = paused;
+        row.insertBefore(comment, row.querySelector('.vh-header-override'));
+      });
+    }
 
     if (this._pendingHeaderFocus !== null) {
       const id = this._pendingHeaderFocus;

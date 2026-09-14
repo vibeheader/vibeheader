@@ -13,6 +13,25 @@ function sample() {
   });
 }
 
+test.each([
+  ['Staging\nBackup', 'Staging Backup'],
+  ['Staging\r\n\r\nBackup', 'Staging Backup'],
+  ['Staging\rBackup', 'Staging Backup'],
+  ['Staging\u2028\u2029Backup', 'Staging Backup'],
+  ['  Staging  & <Backup> 🟢  ', '  Staging  & <Backup> 🟢  ']
+])('normalizes comment line breaks across configuration boundaries: %j', (comment, expected) => {
+  const header = { name: 'X-Test', value: 'keep', comment };
+  const imported = new Config({ headers: [header] });
+  const stored = Config.fromJSON({ rules: [{ actions: [{ ...header, type: 'requestHeader' }] }] });
+  for (const profile of [imported, stored]) {
+    expect(profile.headers[0].comment).toBe(expected);
+    profile.headers = profile.headers;
+    expect(Config.fromJSON(profile.toJSON()).headers[0].comment).toBe(expected);
+    expect(Config.duplicate(profile, 'Copy').headers[0].comment).toBe(expected);
+    expect(profile.headers[0].value).toBe('keep');
+  }
+});
+
 test('natural sorting survives storage and duplication and the last enabled duplicate still wins', () => {
   const profile = sample();
   const service = new ConfigService();

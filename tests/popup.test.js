@@ -190,6 +190,32 @@ describe('optional Comments and temporary Header ordering', () => {
     });
   });
 
+  test('keeps normalized notes and literal markup intact through edits, hiding, and ordering', async () => {
+    const note = 'Staging\r\n\nBackup "><b>QA</b> & 🟢';
+    const expected = 'Staging Backup "><b>QA</b> & 🟢';
+    const { app, chromeMock } = await createApp(makeConfig({ enabled: true, headers: [
+      { ...headers[0], comment: note }, headers[1]
+    ] }), { showComments: true });
+    expect(document.querySelector('.vh-header-comment').value).toBe(expected);
+    expect(document.querySelector('#headers b')).toBeNull();
+    const value = document.querySelector('.vh-h-value');
+    value.value = 'changed';
+    value.dispatchEvent(new Event('input', { bubbles: true }));
+    await app._lastMutationPromise;
+    expect(updateMessages(chromeMock.sendMessage).at(-1).data.config.headers[0].comment)
+      .toBe(expected);
+    await app.setShowComments(false);
+    await app.setShowComments(true);
+    expect(document.querySelector('.vh-header-comment').value).toBe(expected);
+    await app.startHeaderReorder(app.config.id);
+    app.moveHeader('first', 1);
+    await app._lastMutationPromise;
+    expect(app.profileSharePayload(app.config).c).toEqual(['Production', expected]);
+    app.undoHeaderOrder();
+    await app._lastMutationPromise;
+    expect(document.querySelector('.vh-header-comment').value).toBe(expected);
+  });
+
   test('moves notes with rows and shares the natural Header order', async () => {
     const { app } = await createApp(makeConfig({ enabled: true, headers }), { showComments: true });
     await app.startHeaderReorder(app.config.id);

@@ -20,7 +20,8 @@ function normalizeHeaderAction(data = {}) {
     operation: data.operation || 'set',
     name: String(data.name || ''),
     value: String(data.value ?? ''),
-    comment: String(data.comment ?? ''),
+    // Normalize imported and stored notes before a single-line input sees them.
+    comment: String(data.comment ?? '').replace(/[\r\n\u2028\u2029]+/g, ' '),
     enabled: data.enabled !== false
   };
 }
