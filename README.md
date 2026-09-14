@@ -61,7 +61,8 @@ ModHeader was the default header editor for years, but it added ads and went clo
 5. Click **Copy Link** to share the current Profile. Recipients can preview its headers and filters before importing it in one click.
 
 To add notes, open the title menu and enable **Display → Show comments**. Comments
-are optional for each header. Hiding them preserves their contents, and they are
+are optional, single-line notes for each header. Line breaks in imported or saved
+notes are converted to spaces. Hiding comments preserves their contents, and they are
 included in share links even while hidden. Comments describe your setup and are
 never sent as HTTP headers. A successful import with nonempty comments reveals
 them automatically if you have never chosen a Comments setting; an explicit

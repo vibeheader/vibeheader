@@ -72,10 +72,26 @@ test.each([
   ]);
 });
 
+test('normalizes multiline shared comments before storing and sharing them again', async () => {
+  const payload = {
+    v: 2, n: 'Servers', h: [['X-Test', 'keep']], f: [],
+    c: ['Staging\r\n\r\nBackup\n<b>QA</b> 🟢']
+  };
+  const { service, background } = receiver();
+  const imported = await background.importSharedProfile(payload);
+  const expected = 'Staging Backup <b>QA</b> 🟢';
+  expect(imported.headers[0].comment).toBe(expected);
+  expect((await service.storage.get('configs'))[0].rules[0].actions[0].comment).toBe(expected);
+  expect(share(imported)).toEqual({ ...payload, c: [expected] });
+  expect(service.buildDnrRules([imported])[0].action.requestHeaders).toEqual([
+    { header: 'X-Test', operation: 'set', value: 'keep' }
+  ]);
+});
+
 test('omitting comments keeps the same reordered v2 headers, filters, and effective value', async () => {
   const source = sourceProfile();
   const { c, ...oldPayload } = share(source);
-  expect(c).toEqual(['生产服务器 🟢', '测试服务器\n<b>备用</b>']);
+  expect(c).toEqual(['生产服务器 🟢', '测试服务器 <b>备用</b>']);
   expect(oldPayload).toEqual({
     v: 2, n: 'Servers', h: [['x-test', 'winner'], ['X-Test', 'first']],
     f: [['*.example.com', true], ['localhost:3000', false]]

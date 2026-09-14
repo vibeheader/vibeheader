@@ -69,6 +69,51 @@ test('persists comments on immediate close, shares the display preference across
   await expect(popup.locator('.vh-header-comment')).toHaveValue('Staging server');
 });
 
+test('imported multiline notes stay normalized through edits, ordering, sharing, and reopening', async ({ openPopup }) => {
+  let popup = await openPopup();
+  const payload = {
+    v: 2, n: 'Servers', h: [['X-Environment', 'staging'], ['X-Backup', 'backup']], f: [],
+    c: ['Staging\r\n\r\nBackup "><b>QA</b> & 🟢', 'Fallback']
+  };
+  const expected = 'Staging Backup "><b>QA</b> & 🟢';
+  const imported = await popup.evaluate(data => chrome.runtime.sendMessage({
+    action: 'importSharedProfile', data
+  }), payload);
+  expect(imported.success).toBe(true);
+  expect((await configBarrier(popup))[0].headers[0].comment).toBe(expected);
+  await popup.reload();
+  await expect(popup.locator('.vh-header-comment').first()).toHaveValue(expected);
+  await expect(popup.locator('#headers b')).toHaveCount(0);
+  await popup.locator('.vh-h-value').first().fill('production');
+  expect((await configBarrier(popup))[0].headers[0].comment).toBe(expected);
+
+  await enterReorder(popup);
+  await popup.locator('.vh-header-grip').first().press('ArrowDown');
+  await configBarrier(popup);
+  await expect(popup.locator('.vh-header-comment').last()).toHaveValue(expected);
+  await popup.locator('#reorderUndo').click();
+  await configBarrier(popup);
+  await expect(popup.locator('.vh-header-comment').first()).toHaveValue(expected);
+  await popup.locator('#reorderDone').click();
+  await toggleComments(popup);
+  await popup.evaluate(() => {
+    navigator.clipboard.writeText = async value => { window.copiedShareUrl = value; };
+  });
+  await popup.locator('#shareBtn').click();
+  await expect.poll(() => popup.evaluate(() => window.copiedShareUrl)).toBeTruthy();
+  const url = await popup.evaluate(() => window.copiedShareUrl);
+  expect(JSON.parse(decodeURIComponent(new URL(url).hash.slice(3)))).toEqual({
+    ...payload, h: [['X-Environment', 'production'], ['X-Backup', 'backup']],
+    c: [expected, 'Fallback']
+  });
+  await configBarrier(popup);
+  await popup.close();
+  popup = await openPopup();
+  await expect(popup.locator('.vh-header-comment')).toHaveCount(0);
+  await toggleComments(popup);
+  await expect(popup.locator('.vh-header-comment').first()).toHaveValue(expected);
+});
+
 test('keyboard and pointer ordering move whole rows and the last enabled duplicate still wins', async ({ context, openPopup }, testInfo) => {
   let popup = await openPopup();
   await popup.setViewportSize({ width: 480, height: 600 });
